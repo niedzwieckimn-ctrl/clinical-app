@@ -40,16 +40,23 @@ const Pin = {
 // ====== SUPABASE ======
 // zakładam, że masz globalny sb z supabase-client.js
 async function fetchBookings() {
-  // pobierz ostatnie 30 dni + przyszłość
-  const since = new Date(); since.setDate(since.getDate() - 30);
-  const { data, error } = await sb
-    .from('bookings_view') // jeżeli masz widok; jeśli nie, zmień na 'bookings'
-    .select('id, status, when, service_name, name, email, phone')
-    .gte('when', since.toISOString())
-    .order('when', { ascending: true });
+  if (!window.sb) {
+    console.error("Supabase client nie jest dostępny");
+    return [];
+  }
 
-  if (error) throw error;
-  return data || [];
+  const { data, error } = await window.sb
+    .from("bookings")
+    .select("*")
+    .order("when", { ascending: true });
+
+  if (error) {
+    console.error("Błąd pobierania rezerwacji:", error);
+    return [];
+  }
+  return data;
+}
+
 }
 
 // ====== RENDER ======

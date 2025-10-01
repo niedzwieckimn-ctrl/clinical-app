@@ -1,12 +1,13 @@
-// FRONT (admin UI) — tylko anon key, read-only
-const SB_URL  = window?.ENV_SUPABASE_URL     || '{{PUBLIC_SUPABASE_URL}}';
-const SB_ANON = window?.ENV_SUPABASE_ANONKEY || '{{PUBLIC_SUPABASE_ANON_KEY}}';
+// assets/supabase-client.js
 
-// jeśli wstrzykujesz ENV w Netlify (inline), możesz podmienić szablon {{...}} w build-stepie.
-// przy czystych statykach wpisz tu wartości ręcznie lub zrób mały skrypt, który je wstawi.
+// Jeśli chcesz, możesz podmienić te wartości na ENV wstrzykiwane do window._env_.
+const SB_URL  = window?._env_?.PUBLIC_SUPABASE_URL  || "https://TWÓJ-PROJEKT.supabase.co";
+const SB_ANON = window?._env_?.PUBLIC_SUPABASE_ANON_KEY || "TWÓJ_ANON_KEY";
 
-const sb = supabase.createClient(SB_URL, SB_ANON, {
-  auth: { persistSession: false }
-});
+if (!window.supabase) {
+  console.error('[supabase-client] Biblioteka Supabase nie załadowana (brakuje <script src="https://unpkg.com/@supabase/supabase-js@2">).');
+}
 
-window.sb = sb;
+const sb = window.supabase.createClient(SB_URL, SB_ANON, { auth: { persistSession: false } });
+window.sb = sb; // <- udostępniamy dla admin.js
+console.log('[supabase-client] OK');
