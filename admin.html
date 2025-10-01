@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin — Rezerwacje</title>
+  <link rel="stylesheet" href="assets/style.css" />
+  <style>
+    body { max-width: 920px; margin: 0 auto; padding: 16px; }
+    .card { background: #fff; border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,.06); padding: 16px; }
+    .stack { display: grid; gap: 12px; }
+    .row { display:flex; align-items:center; gap:8px; }
+    .pin-wrap{ max-width:460px; margin: 12vh auto; }
+    .hidden { display:none !important; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { padding:10px 8px; border-bottom: 1px solid #eee; text-align: left; }
+    th { font-weight:600; }
+    .status { padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+    .pending { background:#fff8e1; }
+    .confirmed { background:#e8f5e9; }
+    .canceled { background:#ffebee; }
+    .toolbar { display:flex; gap:8px; flex-wrap: wrap; align-items: center; }
+    .toolbar input, .toolbar select { padding:8px 10px; border:1px solid #ddd; border-radius:10px; }
+    .btn { padding:8px 12px; border-radius:10px; border:1px solid #ddd; background:#fafafa; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <header class="row">
+    <img src="assets/logo.svg" alt="" height="36" />
+    <h1 style="margin:0 0 0 8px;">Panel Admin</h1>
+  </header>
+
+  <!-- Ekran PIN -->
+  <section id="pin-screen" class="pin-wrap card stack">
+    <h2>Wejście</h2>
+    <label>PIN admina</label>
+    <input id="pin-input" class="input" type="password" inputmode="numeric" placeholder="****" maxlength="8" />
+    <button id="pin-btn" class="btn">Zaloguj</button>
+    <p id="pin-err" style="color:#b00; margin:0;"></p>
+  </section>
+
+  <!-- Widok listy -->
+  <section id="list-screen" class="hidden stack">
+    <div class="card stack">
+      <div class="toolbar">
+        <select id="status-filter">
+          <option value="">Wszystkie statusy</option>
+          <option value="pending">Oczekujące</option>
+          <option value="confirmed">Potwierdzone</option>
+          <option value="canceled">Anulowane</option>
+        </select>
+        <input id="q" placeholder="Szukaj: imię, email, tel" />
+        <input id="from" type="date" />
+        <input id="to" type="date" />
+        <button id="refresh" class="btn">Odśwież</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th>Termin</th>
+            <th>Klient</th>
+            <th>Usługa</th>
+            <th>Status</th>
+            <th>Tel</th>
+            <th>Email</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          <!-- wiersze JS -->
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <script src="assets/supabase-client.js"></script>
+  <script src="assets/admin.js"></script>
+</body>
+</html>
