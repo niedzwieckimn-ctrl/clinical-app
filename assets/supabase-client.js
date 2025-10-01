@@ -1,23 +1,12 @@
-// assets/supabase-client.js
-// WYMAGANE: w index.html wcześniej <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+// FRONT (admin UI) — tylko anon key, read-only
+const SB_URL  = window?.ENV_SUPABASE_URL     || '{{PUBLIC_SUPABASE_URL}}';
+const SB_ANON = window?.ENV_SUPABASE_ANONKEY || '{{PUBLIC_SUPABASE_ANON_KEY}}';
 
-(function () {
-  const URL  = 'https://eibzijpelnmvbtslquun.supabase.co';     // <- wklej Project URL z Supabase
-  const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpYnppanBlbG5tdmJ0c2xxdXVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg2MTE1OTcsImV4cCI6MjA3NDE4NzU5N30.Dp4u9PlhP-_pGmiNTHp5zSjrMUDfA_k2i85_71_9koo';              // <- wklej anon public key
+// jeśli wstrzykujesz ENV w Netlify (inline), możesz podmienić szablon {{...}} w build-stepie.
+// przy czystych statykach wpisz tu wartości ręcznie lub zrób mały skrypt, który je wstawi.
 
-  if (!window.supabase) {
-    console.error('[supabase-client] Brak SDK (@supabase/supabase-js@2).');
-    return;
-  }
-  if (!URL || !ANON) {
-    console.error('[supabase-client] Brak SUPABASE URL/ANON.');
-    return;
-  }
+const sb = supabase.createClient(SB_URL, SB_ANON, {
+  auth: { persistSession: false }
+});
 
-  try {
-    window.sb = supabase.createClient(URL, ANON);
-    console.log('[supabase-client] OK');
-  } catch (e) {
-    console.error('[supabase-client] init error:', e);
-  }
-})();
+window.sb = sb;
