@@ -1,8 +1,14 @@
 {
-  "name": "massage-spa",
+  "name": "clinical-app-admin",
   "version": "1.0.0",
-  "private":true,
+  "description": "Panel administracyjny do rezerwacji",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "echo 'Local run not configured'"
+  },
   "dependencies": {
-    "resend": "^3.2.0"
+    "@supabase/supabase-js": "^2.42.0",
+    "node-fetch": "^3.3.2"
   }
 }
