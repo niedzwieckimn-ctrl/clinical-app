@@ -138,3 +138,64 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 });
+async function fetchBookings() {
+  try {
+    const { data, error } = await window.sb
+      .from('bookings_view')
+      .select('booking_no, status, when, service_name, notes, created_at')
+      .order('when', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.error('Błąd pobierania rezerwacji:', e);
+    return [];
+  }
+}
+function fmtWhen(iso) {
+  try {
+    return new Date(iso).toLocaleString('pl-PL', { dateStyle: 'full', timeStyle: 'short' });
+  } catch { return iso || ''; }
+}
+
+function renderBookings(rows) {
+  const box = document.getElementById('admin-list');
+  if (!box) return;
+
+  if (!rows.length) {
+    box.innerHTML = '<p>Brak rezerwacji.</p>';
+    return;
+  }
+
+  const html = [
+    '<table class="table">',
+    '<thead><tr>',
+    '<th>#</th><th>Termin</th><th>Zabieg</th><th>Status</th><th>Uwagi</th>',
+    '</tr></thead><tbody>',
+    ...rows.map(r => `
+      <tr>
+        <td>${r.booking_no ?? ''}</td>
+        <td>${fmtWhen(r.when)}</td>
+        <td>${r.service_name ?? '-'}</td>
+        <td>${r.status ?? '-'}</td>
+        <td>${r.notes ?? ''}</td>
+      </tr>
+    `),
+    '</tbody></table>'
+  ].join('');
+
+  box.innerHTML = html;
+}
+async function initAdminList() {
+  const rows = await fetchBookings();
+  renderBookings(rows);
+}
+
+// jeżeli masz już istniejące init() po PIN — wywołaj w nim:
+initAdminList();
+
+// jeżeli nie, to chociaż na DOMContentLoaded:
+document.addEventListener('DOMContentLoaded', () => {
+  const listBox = document.getElementById('admin-list');
+  if (listBox) initAdminList();
+});
