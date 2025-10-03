@@ -1,170 +1,139 @@
-// ====== UTIL ======
-const $  = (s, r=document) => r.querySelector(s);
-const $$ = (s, r=document) => [...r.querySelectorAll(s)];
-
-function fmtWhen(iso) {
-  try { return new Date(iso).toLocaleString('pl-PL', { dateStyle:'medium', timeStyle:'short' }); }
-  catch { return iso || ''; }
-}
-function matchesQuery(b, q) {
-  if (!q) return true;
-  q = q.toLowerCase();
-  return [
-    b.client_name, b.client_email, b.phone, b.service_name, b.notes
-  ].some(x => (x||'').toLowerCase().includes(q));
-}
-function inRange(iso, from, to) {
-  if (!from && !to) return true;
-  const t = new Date(iso).getTime();
-  if (from && t < new Date(from).getTime()) return false;
-  if (to && t > new Date(to).getTime() + 24*60*60*1000 - 1) return false;
-  return true;
-}
-
-// ====== PIN ======
-const PIN_DEFAULT = '2505';
-const Pin = {
-  ok()      { return localStorage.getItem('adm_ok') === '1'; },
-  setOk(v)  { localStorage.setItem('adm_ok', v ? '1' : '0'); },
-  async check(pin) { return String(pin||'').trim() === PIN_DEFAULT; }
-};
-
-// ====== SUPABASE – pobranie listy z widoku ======
-async function fetchBookings() {
-  if (!window.sb) { console.error('Supabase client nie jest dostępny'); return []; }
-
-  const { data, error } = await window.sb
-    .from('bookings_view')
-    .select('booking_no, status, when, service_name, client_name, client_email, phone, notes, created_at')
-    .order('when', { ascending: true })
-    .limit(500);
-
-  if (error) { console.error('Błąd pobierania rezerwacji:', error); return []; }
-  return data || [];
-}
-
-// ====== RENDER ======
-function renderRows(list) {
-  const tbody = $('#rows');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-
-  for (const b of list) {
-    const st = (b.status || 'pending').toLowerCase();
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${fmtWhen(b.when)}</td>
-      <td>${b.client_name || '-'}</td>
-      <td>${b.service_name || '-'}</td>
-      <td><span class="status ${st}">${st}</span></td>
-      <td>${b.phone || '-'}</td>
-      <td>${b.client_email || '-'}</td>
-      <td>
-        ${st === 'pending' ? `<button class="btn confirm-btn" data-id="${b.booking_no}">Potwierdź</button>` : ''}
-        ${st !== 'canceled' ? `<button class="btn cancel-btn"  data-id="${b.booking_no}">Anuluj</button>` : ''}
-      </td>
-    `;
-    tbody.appendChild(tr);
+// assets/admin.js
+(async function () {
+  // --- Supabase klient (masz już plik supabase-client.js z window.sb) ---
+  if (!window.sb) {
+    console.error('Supabase client not found (window.sb)');
+    return;
   }
-}
 
-// ====== FILTRY ======
-function applyFilters(items) {
-  const status = $('#status-filter').value;
-  const q = $('#q').value.trim();
-  const from = $('#from').value || null;
-  const to = $('#to').value || null;
+  const $list = document.getElementById('bookingsList'); // <div id="bookingsList"></div> w HTML
 
-  return items.filter(b =>
-    (!status || (b.status || 'pending') === status) &&
-    matchesQuery(b, q) &&
-    inRange(b.when, from, to)
-  );
-}
-
-// ====== INIT LISTY ======
-async function initList() {
-  try {
-    $('#refresh').disabled = true;
-    const data = await fetchBookings();
-    const filtered = applyFilters(data);
-    renderRows(filtered);
-  } finally {
-    $('#refresh').disabled = false;
+  function fmtDate(iso) {
+    try {
+      return new Date(iso).toLocaleString('pl-PL', { dateStyle: 'full', timeStyle: 'short' });
+    } catch { return iso || ''; }
   }
-}
 
-// Delegacja kliknięć (1 listener na tbody)
-$('#rows')?.addEventListener('click', async (e) => {
-  const btnConfirm = e.target.closest('.confirm-btn');
-  const btnCancel  = e.target.closest('.cancel-btn');
-  if (!btnConfirm && !btnCancel) return;
+  async function fetchBookings() {
+    const { data, error } = await window.sb
+      .from('bookings_view')
+      .select('booking_no, client_name, client_email, phone, notes, status, when, service_name, created_at')
+      .order('when', { ascending: true })
+      .limit(500);
+    if (error) {
+      console.error('Błąd pobierania rezerwacji:', error);
+      return [];
+    }
+    return data || [];
+  }
 
-  const bookingNo = (btnConfirm || btnCancel).dataset.id;
-  if (!bookingNo) return;
-
-  const btn = btnConfirm || btnCancel;
-  btn.disabled = true;
-
-  try {
-    const fn = btnConfirm ? 'admin-confirm' : 'admin-cancel';
-    const res = await fetch(`/.netlify/functions/${fn}`, {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json' },
-      body: JSON.stringify({ id: bookingNo })
+  function render(bookings) {
+    if (!$list) return;
+    if (!bookings.length) {
+      $list.innerHTML = '<p>Brak rezerwacji.</p>';
+      return;
+    }
+    $list.innerHTML = bookings.map(b => {
+      const wait = String(b.status || '').toLowerCase().startsWith('oczek');
+      return `
+        <div class="card" data-id="${b.booking_no}">
+          <div class="row">
+            <div>
+              <div><b>Nr:</b> ${b.booking_no}</div>
+              <div><b>Termin:</b> ${fmtDate(b.when)}</div>
+              <div><b>Zabieg:</b> ${b.service_name || '-'}</div>
+              <div><b>Klient:</b> ${b.client_name || '-'}</div>
+              <div><b>Tel:</b> ${b.phone || '-'}</div>
+              <div><b>Email:</b> ${b.client_email || '-'}</div>
+              ${b.notes ? `<div><b>Uwagi:</b> ${b.notes}</div>` : ''}
+              <div><b>Status:</b> <span class="status">${b.status}</span></div>
+            </div>
+            <div class="actions">
+              ${wait ? `<button class="btn-confirm">Potwierdź</button>` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    // podpinamy klik
+    $list.querySelectorAll('.btn-confirm').forEach(btn => {
+      btn.addEventListener('click', onConfirmClick);
     });
-
-    let out;
-    try { out = await res.json(); } catch { out = { ok:false, raw: await res.text() }; }
-    if (res.ok && out?.ok) {
-      alert(btnConfirm ? 'Rezerwacja potwierdzona ✅' : 'Rezerwacja anulowana ❌');
-      initList();
-    } else {
-      console.error(out);
-      alert('Błąd akcji administracyjnej');
-    }
-  } catch (err) {
-    console.error(err);
-    alert('Błąd sieci / funkcji');
-  } finally {
-    btn.disabled = false;
   }
-});
 
-// ====== UI ======
-function wireUI() {
-  $('#refresh').addEventListener('click', initList);
-  $('#status-filter').addEventListener('change', initList);
-  $('#q').addEventListener('input', () => initList());
-  $('#from').addEventListener('change', initList);
-  $('#to').addEventListener('change', initList);
-}
+  async function onConfirmClick(e) {
+    const card = e.target.closest('.card');
+    const id = card?.getAttribute('data-id');
+    if (!id) return;
+    e.target.disabled = true;
 
-// ====== START ======
-document.addEventListener('DOMContentLoaded', () => {
-  const pinScr = $('#pin-screen');
-  const listScr = $('#list-screen');
+    try {
+      // 1) zaciągnij dane tego wpisu (do maila)
+      const { data: arr, error: e1 } = await sb
+        .from('bookings_view')
+        .select('booking_no, client_name, client_email, phone, notes, status, when, service_name')
+        .eq('booking_no', id)
+        .limit(1);
+      if (e1 || !arr || !arr[0]) throw e1 || new Error('Brak danych rezerwacji');
+      const b = arr[0];
 
-  const enter = async () => {
-    const ok = await Pin.check($('#pin-input').value);
-    if (ok) {
-      Pin.setOk(true);
-      pinScr.classList.add('hidden');
-      listScr.classList.remove('hidden');
-      wireUI();
-      initList();
-    } else {
-      $('#pin-err').textContent = 'Nieprawidłowy PIN';
+      // 2) ustaw status na "Potwierdzona"
+      const { error: e2 } = await sb
+        .from('bookings')
+        .update({ status: 'Potwierdzona' })
+        .eq('id', id);
+      if (e2) throw e2;
+
+      // 3) e-maile (terapeutka – bez "to"; klient – z "to")
+      const whenStr = fmtDate(b.when);
+      const subject = `Potwierdzono rezerwację #${id.slice(0, 8)} — ${whenStr}`;
+      const html = `
+        <h2>Potwierdzono rezerwację</h2>
+        <p><b>Nr rezerwacji:</b> ${id}</p>
+        <p><b>Termin:</b> ${whenStr}</p>
+        <p><b>Zabieg:</b> ${b.service_name || '-'}</p>
+        <p><b>Klient:</b> ${b.client_name || '-'}</p>
+        <p><b>Kontakt:</b><br>Tel: ${b.phone || '-'}<br>Email: ${b.client_email || '-'}</p>
+        ${b.notes ? `<p><b>Uwagi:</b> ${b.notes}</p>` : ''}
+      `;
+
+      // do terapeutki (domyślny THERAPIST_EMAIL na backendzie)
+      if (window.sendEmail) {
+        await window.sendEmail(subject, html);
+      }
+
+      // do klienta (tylko jeśli jest mail)
+      if (window.sendEmail && b.client_email) {
+        await window.sendEmail(
+          `Twoja rezerwacja została potwierdzona — ${whenStr}`,
+          `
+            <h2>Twoja rezerwacja została potwierdzona</h2>
+            <p><b>Termin:</b> ${whenStr}</p>
+            <p><b>Zabieg:</b> ${b.service_name || '-'}</p>
+            <p>Do zobaczenia!</p>
+          `,
+          b.client_email
+        );
+      }
+
+      // 4) odśwież kartę w UI
+      const statusEl = card.querySelector('.status');
+      if (statusEl) statusEl.textContent = 'Potwierdzona';
+      e.target.remove(); // usuń przycisk „Potwierdź”
+    } catch (err) {
+      console.error('Potwierdzanie nie powiodło się:', err);
+      alert('Nie udało się potwierdzić. Szczegóły w konsoli.');
+      e.target.disabled = false;
     }
-  };
-
-  $('#pin-btn')?.addEventListener('click', enter);
-  $('#pin-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') enter(); });
-
-  if (Pin.ok()) {
-    pinScr.classList.add('hidden');
-    listScr.classList.remove('hidden');
-    wireUI();
-    initList();
   }
-});
+
+  // start
+  const data = await fetchBookings();
+  render(data);
+
+  // prosty auto-refresh co 60 s (opcjonalnie)
+  setInterval(async () => {
+    const d = await fetchBookings();
+    render(d);
+  }, 60000);
+})();
