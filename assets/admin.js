@@ -57,8 +57,6 @@ async function fetchBookings() {
   return data;
 }
 
-}
-
 // ====== RENDER ======
 function renderRows(list) {
   const tbody = $('#rows');
