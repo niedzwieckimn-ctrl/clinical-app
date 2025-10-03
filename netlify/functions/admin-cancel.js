@@ -1,26 +1,83 @@
 import { createClient } from '@supabase/supabase-js';
 
+const THERAPIST_EMAIL = process.env.THERAPIST_EMAIL || 'niedzwiecki.mn@gmail.com';
+
+async function sendEmail({ to, subject, html, text }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+  const payload = { from, to, subject, html: html || `<pre>${text||''}</pre>`, text };
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method:'POST',
+    headers: { 'Authorization':`Bearer ${apiKey}`, 'Content-Type':'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error('Email send failed: ' + (await res.text()));
+}
+
 export async function handler(event) {
   try {
     const { SUPABASE_URL, SUPABASE_SERVICE_ROLE } = process.env;
-    const { booking_id } = JSON.parse(event.body || '{}');
-
-    if (!booking_id) return { statusCode: 400, body: 'Missing booking_id' };
+    const { id } = JSON.parse(event.body || '{}'); // booking_no
+    if (!id) return { statusCode: 400, body: 'Missing booking id' };
 
     const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
 
-    // status = canceled, zwolnij slot
-    const { data: b, error: e1 } = await sb.from('bookings').select('slot_id').eq('id', booking_id).single();
-    if (e1) return { statusCode: 500, body: e1.message };
+    // znajdź slot_id + dane do e-maila
+    const { data: booking, error: getErr } = await sb
+      .from('bookings_view')
+      .select('booking_no, when, service_name, client_name, client_email, phone')
+      .eq('booking_no', id)
+      .single();
 
-    const { error: e2 } = await sb.from('bookings').update({ status: 'canceled', canceled_at: new Date().toISOString() }).eq('id', booking_id);
-    if (e2) return { statusCode: 500, body: e2.message };
+    if (getErr || !booking) return { statusCode: 404, body: JSON.stringify({ error: 'Booking not found', details: getErr }) };
 
-    const { error: e3 } = await sb.from('slots').update({ taken: false }).eq('id', b.slot_id);
-    if (e3) return { statusCode: 500, body: e3.message };
+    // pobierz slot_id z bookings (bo widok go nie ma)
+    const { data: bRow, error: bErr } = await sb
+      .from('bookings')
+      .select('slot_id')
+      .eq('booking_no', id)
+      .single();
+
+    if (bErr) return { statusCode: 500, body: JSON.stringify({ error: bErr }) };
+
+    // update status
+    const { error: updErr } = await sb
+      .from('bookings')
+      .update({ status: 'canceled', canceled_at: new Date().toISOString() })
+      .eq('booking_no', id);
+
+    if (updErr) return { statusCode: 500, body: JSON.stringify({ error: updErr }) };
+
+    // zwolnij slot
+    if (bRow?.slot_id) {
+      const { error: slotErr } = await sb
+        .from('slots')
+        .update({ taken: false })
+        .eq('id', bRow.slot_id);
+      if (slotErr) return { statusCode: 500, body: JSON.stringify({ error: slotErr }) };
+    }
+
+    // e-mail
+    const whenStr = new Date(booking.when).toLocaleString('pl-PL', { dateStyle:'full', timeStyle:'short' });
+    const subject = `❌ Rezerwacja anulowana – ${booking.service_name}`;
+    const html = `
+      <h2>Rezerwacja anulowana</h2>
+      <p><b>Klient:</b> ${booking.client_name || '-'}<br/>
+         <b>Data:</b> ${whenStr}<br/>
+         <b>Usługa:</b> ${booking.service_name}</p>
+      <p>Telefon: ${booking.phone || '-'} • E-mail: ${booking.client_email || '-'}</p>
+      <p>Jeśli to pomyłka, prosimy o kontakt.</p>
+    `;
+
+    await sendEmail({
+      to: [booking.client_email, THERAPIST_EMAIL],
+      subject,
+      html
+    });
 
     return { statusCode: 200, body: JSON.stringify({ ok: true }) };
   } catch (e) {
-    return { statusCode: 500, body: e.message };
+    return { statusCode: 500, body: JSON.stringify({ ok:false, error: String(e) }) };
   }
 }
