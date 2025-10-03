@@ -57,23 +57,49 @@ async function fetchBookings() {
   return data;
 }
 
-// ====== RENDER ======
 function renderRows(list) {
-  const tbody = $('#rows');
+  const tbody = document.querySelector('#rows');
+  if (!tbody) return;
   tbody.innerHTML = '';
+
   for (const b of list) {
-    const tr = document.createElement('tr');
     const st = (b.status || 'pending').toLowerCase();
+    const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${fmtWhen(b.when)}</td>
-      <td>${b.name || '-'}</td>
+      <td>${b.client_name || '-'}</td>
       <td>${b.service_name || '-'}</td>
       <td><span class="status ${st}">${st}</span></td>
       <td>${b.phone || '-'}</td>
-      <td>${b.email || '-'}</td>
+      <td>${b.client_email || '-'}</td>
+      <td>
+        ${st === 'pending'
+          ? `<button class="confirm-btn" data-id="${b.booking_no}">Potwierdź</button>`
+          : ''}
+      </td>
     `;
     tbody.appendChild(tr);
   }
+
+  // 🟡 podpinamy obsługę kliknięcia
+  tbody.querySelectorAll('.confirm-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.currentTarget.dataset.id;
+      const res = await fetch('/.netlify/functions/admin-confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      const out = await res.json();
+      if (out.ok) {
+        alert('Rezerwacja potwierdzona ✅');
+        initList(); // odśwież listę
+      } else {
+        console.error(out);
+        alert('Błąd przy potwierdzaniu rezerwacji');
+      }
+    });
+  });
 }
 
 // ====== FILTERING ======
