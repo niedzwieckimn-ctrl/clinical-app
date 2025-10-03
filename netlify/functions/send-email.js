@@ -1,25 +1,35 @@
-export async function handler(event) {
+// netlify/functions/send-email.js
+export const handler = async (event) => {
   try {
-    const { subject, html } = JSON.parse(event.body || '{}');
-    if (!subject || !html) return { statusCode: 400, body: 'Missing fields' };
+    const { subject, html, to } = JSON.parse(event.body || '{}');
+    if (!subject || !html) {
+      return new Response('[sendEmail] Missing subject or html', { status: 400 });
+    }
 
-    const r = await fetch('https://api.resend.com/emails', {
+    const apiKey = process.env.RESEND_API_KEY;
+    const from = process.env.FROM_EMAIL;
+    const therapist = process.env.THERAPIST_EMAIL;
+    const rcpt = (to && String(to).trim()) || therapist;
+
+    const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: process.env.FROM_EMAIL,
-        to: process.env.THERAPIST_EMAIL,
-        subject,
-        html,
-      }),
+        from,
+        to: [rcpt],
+        subject: String(subject),
+        html: String(html)
+      })
     });
 
-    if (!r.ok) return { statusCode: r.status, body: await r.text() };
-    return { statusCode: 200, body: JSON.stringify(await r.json()) };
-  } catch (err) {
-    return { statusCode: 500, body: 'Server error: ' + err.message };
+    const text = await res.text();
+    if (!res.ok) return new Response(text, { status: res.status });
+
+    return new Response(text, { status: 200 });
+  } catch (e) {
+    return new Response(`[sendEmail] ${e.message || e}`, { status: 500 });
   }
-}
+};
