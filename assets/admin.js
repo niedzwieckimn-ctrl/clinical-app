@@ -1,274 +1,257 @@
-/* ===========================
-   Admin Panel – single file JS
-   Wymagania: na stronie wcześniej załączony supabase-client.js,
-   który tworzy window.sb = createClient(...)
-   =========================== */
+/* =========================================
+   Admin panel – dopasowany do Twojego HTML:
+   - #pin-screen, #pin-input, #pin-btn, #pin-err
+   - #list-screen, #rows (tbody), filtry: #status-filter #q #from #to #refresh
+   - Supabase klient: window.sb (tworzony w assets/supabase-client.js)
+   - Widok: bookings_view (kolumny: booking_no, status, when, service_name, client_name, client_email, phone, notes, created_at)
+   ========================================= */
 
 (function () {
-  // --- KONFIG (PIN tymczasowo – przeniesiemy do env) ---
-  const ADMIN_PIN = window.ADMIN_PIN || '2505';
-  const AUTH_KEY = 'admin_auth_ok';
+  // --- KONFIG ---
+  const PIN = '2505';           // PIN logowania (jak ustaliliśmy)
+  const AUTH_KEY = 'adm_ok';    // flaga w localStorage, nie zmieniaj
 
-  // --- Helpery DOM ---
-  const $ = (sel, root = document) => root.querySelector(sel);
-  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  // --- UTIL ---
+  const $  = (s, r=document) => r.querySelector(s);
+  const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 
-  // Rozpoznaj kluczowe elementy nawet przy różnych ID/klasach
-  function getEls() {
-    const form =
-      $('#loginForm') || $('#pinForm') || $('form[action="#pin"]') || $('form');
-    const pin =
-      $('#pin') ||
-      $('[name="pin"]') ||
-      $('input[type="password"], input[autocomplete="one-time-code"]');
-
-    const loginCard = $('#loginCard') || $('#login') || $('.login,.auth');
-    const app = $('#app') || $('.app') || document.body; // fallback
-
-    const list =
-      $('#bookingsList') ||
-      $('[data-role="bookingsList"]') ||
-      $('#list, .list, .bookings');
-
-    const filter =
-      $('#statusFilter') ||
-      $('[data-role="statusFilter"]') ||
-      $('#filter');
-
-    const err = $('#loginError') || $('[data-role="loginError"]');
-
-    return { form, pin, loginCard, app, list, filter, err };
-  }
-
-  // --- Format daty/godziny PL ---
   function fmtWhen(iso) {
     try {
-      const d = new Date(iso);
-      return d.toLocaleString('pl-PL', {
-        dateStyle: 'full',
-        timeStyle: 'short',
-      });
-    } catch {
-      return iso || '';
-    }
+      return new Date(iso).toLocaleString('pl-PL', { dateStyle:'medium', timeStyle:'short' });
+    } catch { return iso || ''; }
   }
 
-  // --- Bezpieczny dostęp do Supabase (window.sb z supabase-client.js) ---
   function assertSB() {
     if (!window.sb) {
-      throw new Error(
-        'Supabase client (window.sb) nie jest dostępny. Upewnij się, że supabase-client.js jest załączony przed admin.js.'
-      );
+      throw new Error('[admin] Brak Supabase client (window.sb). Upewnij się, że assets/supabase-client.js ładuje się PRZED admin.js');
     }
     return window.sb;
   }
 
-  // --- API: pobierz rezerwacje z widoku ---
-  async function fetchBookings(status = 'all') {
+  // --- FILTRY (lokalne) ---
+  function matchesQuery(b, q) {
+    if (!q) return true;
+    q = q.toLowerCase();
+    return [
+      b.client_name, b.client_email, b.phone, b.service_name, b.notes
+    ].some(x => (x||'').toLowerCase().includes(q));
+  }
+  function inRange(iso, from, to) {
+    if (!from && !to) return true;
+    const t = new Date(iso).getTime();
+    if (from && t < new Date(from).getTime()) return false;
+    if (to) {
+      const end = new Date(to); end.setHours(23,59,59,999);
+      if (t > end.getTime()) return false;
+    }
+    return true;
+  }
+
+  // --- API: pobierz listę z widoku ---
+  async function fetchBookings() {
     const sb = assertSB();
-    let q = sb.from('bookings_view').select('*').order('when', { ascending: true }).limit(500);
-    if (status && status !== 'all') q = q.eq('status', status);
-    const { data, error, status: httpStatus } = await q;
+    const { data, error, status } = await sb
+      .from('bookings_view')
+      .select('booking_no, status, when, service_name, client_name, client_email, phone, notes, created_at')
+      .order('when', { ascending: true })
+      .limit(500);
+
     if (error) {
-      // PostgREST 404 przy braku widoku
-      throw new Error(
-        `[fetchBookings] ${httpStatus || ''} ${error.code || ''}: ${error.message || error}`
-      );
+      console.error('[admin] Błąd pobierania rezerwacji:', status, error);
+      throw new Error(error.message || 'Błąd pobierania');
     }
     return data || [];
   }
+  window.fetchBookings = fetchBookings; // do debug
 
-  // --- Akcje admina (używają Netlify Functions – opcjonalnie) ---
-  async function callFn(name, payload) {
+  // --- RENDER TABELI ---
+  function renderRows(list) {
+    const tbody = $('#rows');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    for (const b of list) {
+      const st = (b.status || 'Oczekująca').toLowerCase();
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${fmtWhen(b.when)}</td>
+        <td>${b.client_name || '-'}</td>
+        <td>${b.service_name || '-'}</td>
+        <td><span class="status ${st}">${b.status || 'Oczekująca'}</span></td>
+        <td>${b.phone || '-'}</td>
+        <td>${b.client_email || '-'}</td>
+        <td>
+          ${st.startsWith('oczek') || st === 'pending' ? `<button class="btn confirm-btn" data-id="${b.booking_no}">Potwierdź</button>` : ''}
+          ${st !== 'anulowana' && st !== 'canceled' ? `<button class="btn cancel-btn" data-id="${b.booking_no}">Anuluj</button>` : ''}
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
+
+  function applyFilters(items) {
+    const status = $('#status-filter')?.value || '';
+    const q = $('#q')?.value?.trim() || '';
+    const from = $('#from')?.value || null;
+    const to   = $('#to')?.value || null;
+
+    return items.filter(b =>
+      (!status || String(b.status||'').toLowerCase() === status.toLowerCase()) &&
+      matchesQuery(b, q) &&
+      inRange(b.when, from, to)
+    );
+  }
+
+  async function initList() {
+    const btn = $('#refresh');
     try {
-      const res = await fetch(`/.netlify/functions/${name}`, {
+      if (btn) btn.disabled = true;
+      const data = await fetchBookings();
+      const filtered = applyFilters(data);
+      renderRows(filtered);
+    } catch (e) {
+      console.error(e);
+      const tb = $('#rows');
+      if (tb) tb.innerHTML = `<tr><td colspan="7" style="color:#b00;padding:8px;">${e.message || e}</td></tr>`;
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+  window.initList = initList; // do debug
+
+  // --- AKCJE: Potwierdź / Anuluj ---
+  async function confirmBooking(id) {
+    // WARIANT A (zalecany): Netlify Function z service_role
+    try {
+      const res = await fetch('/.netlify/functions/admin-confirm', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload || {}),
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ id })
       });
-      const txt = await res.text();
-      if (!res.ok) throw new Error(`HTTP ${res.status} – ${txt}`);
-      try { return JSON.parse(txt); } catch { return { ok: true, raw: txt }; }
+      const out = await res.text();
+      if (!res.ok) throw new Error(out);
+      try { return JSON.parse(out); } catch { return { ok:true, raw: out }; }
     } catch (e) {
-      // Nie blokuj działania, tylko pokaż błąd
-      console.warn(`[functions:${name}]`, e);
-      throw e;
+      console.warn('[admin-confirm] funkcja nieosiągalna – fallback bezpośredni:', e);
+      // WARIANT B (fallback): bezpośrednio w DB (jeśli RLS pozwala)
+      const sb = assertSB();
+      const { error } = await sb.from('bookings')
+        .update({ status: 'Potwierdzona', confirmed_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+      return { ok: true };
     }
   }
 
-  async function confirmBooking(booking_id) {
-    // Jeśli nie masz jeszcze funkcji – zakomentuj callFn, a tylko zmieniaj status lokalnie / w DB
-    // return callFn('admin-confirm', { booking_id });
-    // Minimalny fallback – bez Functions: ustaw status w DB, jeśli masz endpointy RLS dozwolone:
-    const sb = assertSB();
-    const { error } = await sb.from('bookings')
-      .update({ status: 'Potwierdzona' })
-      .eq('id', booking_id);
-    if (error) throw error;
-    return { ok: true };
-  }
-
-  async function cancelBooking(booking_id) {
-    // return callFn('admin-cancel', { booking_id });
-    const sb = assertSB();
-    const { error } = await sb.from('bookings')
-      .update({ status: 'Anulowana' })
-      .eq('id', booking_id);
-    if (error) throw error;
-    return { ok: true };
-  }
-
-  // --- Render listy ---
-  function renderBookings(listEl, rows) {
-    if (!listEl) return;
-    if (!rows || !rows.length) {
-      listEl.innerHTML = `
-        <div class="empty" style="padding:12px;color:#666;">
-          Brak rezerwacji do wyświetlenia.
-        </div>`;
-      return;
-    }
-
-    const html = rows
-      .map((r) => {
-        const whenTxt = fmtWhen(r.when);
-        return `
-          <div class="booking-row" data-id="${r.booking_no}"
-               style="border:1px solid #ddd;border-radius:8px;margin:8px 0;padding:10px;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;">
-            <div class="info" style="min-width:0;">
-              <div style="font-weight:600;">#${r.booking_no || ''} • ${r.service_name || ''}</div>
-              <div>${whenTxt}</div>
-              <div>${r.client_name || ''} &lt;${r.client_email || ''}&gt;</div>
-              <div>Tel: ${r.phone || ''}</div>
-              ${r.notes ? `<div style="color:#555;">Uwagi: ${r.notes}</div>` : ''}
-              <div style="margin-top:4px;">
-                <span class="status" style="padding:2px 8px;border-radius:999px;border:1px solid #ccc;font-size:12px;">
-                  ${r.status || 'Oczekująca'}
-                </span>
-              </div>
-            </div>
-            <div class="actions" style="display:flex;gap:6px;">
-              <button class="btn btn-ok" data-action="confirm"
-                      style="padding:6px 10px;border:0;border-radius:8px;cursor:pointer;">Potwierdź</button>
-              <button class="btn btn-cancel" data-action="cancel"
-                      style="padding:6px 10px;border:0;border-radius:8px;background:#eee;cursor:pointer;">Anuluj</button>
-            </div>
-          </div>
-        `;
-      })
-      .join('');
-
-    listEl.innerHTML = html;
-  }
-
-  // --- Odświeżenie (z filtrem) ---
-  async function refresh(els) {
+  async function cancelBooking(id) {
+    // WARIANT A: funkcja netlify
     try {
-      const val =
-        (els.filter && (els.filter.value || els.filter.dataset.value)) || 'all';
-      const rows = await fetchBookings(val);
-      renderBookings(els.list, rows);
+      const res = await fetch('/.netlify/functions/admin-cancel', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ id })
+      });
+      const out = await res.text();
+      if (!res.ok) throw new Error(out);
+      try { return JSON.parse(out); } catch { return { ok:true, raw: out }; }
     } catch (e) {
-      console.error('Błąd pobierania rezerwacji:', e);
-      if (els.list)
-        els.list.innerHTML = `<div style="color:#b00;padding:12px;">Błąd pobierania rezerwacji: ${e.message || e}</div>`;
+      console.warn('[admin-cancel] funkcja nieosiągalna – fallback bezpośredni:', e);
+      // WARIANT B: bezpośrednio w DB
+      const sb = assertSB();
+      const { error } = await sb.from('bookings')
+        .update({ status: 'Anulowana', canceled_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+      // opcjonalnie: zwolnić slot – wymaga slot_id; w widoku go nie ma, więc pomijamy w fallbacku
+      return { ok: true };
     }
   }
 
-  // --- Logowanie PIN ---
-  function showApp(els) {
-    if (els.loginCard) els.loginCard.style.display = 'none';
-    if (els.app && els.app !== document.body) els.app.style.display = '';
-    document.body.classList.add('authed');
-    localStorage.setItem(AUTH_KEY, '1');
-  }
+  // Delegacja klików – jeden listener na całe tbody
+  function wireActions() {
+    const tbody = $('#rows');
+    if (!tbody) return;
+    tbody.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const id = btn.dataset.id;
+      if (!id) return;
 
-  function showLogin(els) {
-    if (els.app && els.app !== document.body) els.app.style.display = 'none';
-    if (els.loginCard) els.loginCard.style.display = '';
-    document.body.classList.remove('authed');
-    localStorage.removeItem(AUTH_KEY);
-  }
-
-  function attachLogin(els) {
-    if (!els.form || !els.pin) {
-      console.warn(
-        '[login] Brakuje formularza lub pola PIN – szukam #loginForm/#pinForm i #pin/[name=pin].'
-      );
-      return;
-    }
-    els.form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const val = String(els.pin.value || '').trim();
-      if (!val) {
-        if (els.err) {
-          els.err.textContent = 'Wpisz PIN.'; els.err.style.display = '';
-          setTimeout(() => (els.err.style.display = 'none'), 2000);
+      btn.disabled = true;
+      try {
+        if (btn.classList.contains('confirm-btn')) {
+          const res = await confirmBooking(id);
+          if (!res?.ok) throw new Error('Nie udało się potwierdzić');
+          alert('Rezerwacja potwierdzona ✅');
+        } else if (btn.classList.contains('cancel-btn')) {
+          const res = await cancelBooking(id);
+          if (!res?.ok) throw new Error('Nie udało się anulować');
+          alert('Rezerwacja anulowana ❌');
         }
-        return;
-      }
-      if (val === ADMIN_PIN) {
-        showApp(els);
-        refresh(els);
-      } else {
-        if (els.err) {
-          els.err.textContent = 'Zły PIN.'; els.err.style.display = '';
-          setTimeout(() => (els.err.style.display = 'none'), 2000);
-        }
-        if (els.pin.select) els.pin.select();
+        await initList();
+      } catch (err) {
+        console.error(err);
+        alert(`Błąd akcji: ${err.message || err}`);
+      } finally {
+        btn.disabled = false;
       }
     });
   }
 
-  // --- Zdarzenia UI ---
-  function attachUI(els) {
-    // filtr statusu
-    if (els.filter) {
-      els.filter.addEventListener('change', () => refresh(els));
-    }
-    // akcje confirm / cancel (delegacja)
-    if (els.list) {
-      els.list.addEventListener('click', async (e) => {
-        const btn = e.target.closest('[data-action]');
-        if (!btn) return;
-        const row = e.target.closest('.booking-row');
-        const id = row && row.getAttribute('data-id');
-        if (!id) return;
+  // --- LOGOWANIE PIN ---
+  function wireLogin() {
+    const pinScr  = $('#pin-screen');
+    const listScr = $('#list-screen');
+    const btn     = $('#pin-btn');
+    const inp     = $('#pin-input');
+    const errBox  = $('#pin-err');
 
-        btn.disabled = true;
-        try {
-          if (btn.dataset.action === 'confirm') {
-            await confirmBooking(id);
-          } else if (btn.dataset.action === 'cancel') {
-            await cancelBooking(id);
-          }
-          await refresh(els);
-        } catch (err) {
-          alert(`Błąd akcji: ${err.message || err}`);
-          btn.disabled = false;
-        }
-      });
+    function showList() {
+      pinScr?.classList.add('hidden');
+      listScr?.classList.remove('hidden');
+      localStorage.setItem(AUTH_KEY, '1');
+      initList();
     }
+
+    function showErr(msg) {
+      if (!errBox) return alert(msg);
+      errBox.textContent = msg;
+    }
+
+    if (localStorage.getItem(AUTH_KEY) === '1') {
+      showList();
+      return;
+    }
+
+    const enter = () => {
+      const val = String(inp?.value || '').trim();
+      if (!val) { showErr('Wpisz PIN'); return; }
+      if (val === PIN) {
+        showList();
+      } else {
+        showErr('Nieprawidłowy PIN');
+        inp?.select?.();
+      }
+    };
+
+    btn?.addEventListener('click', enter);
+    inp?.addEventListener('keydown', (e) => { if (e.key === 'Enter') enter(); });
   }
 
-  // --- Init ---
+  // --- FILTRY / TOOLBAR ---
+  function wireFilters() {
+    $('#refresh')?.addEventListener('click', initList);
+    $('#status-filter')?.addEventListener('change', initList);
+    $('#q')?.addEventListener('input', () => initList());
+    $('#from')?.addEventListener('change', initList);
+    $('#to')?.addEventListener('change', initList);
+  }
+
+  // --- START ---
   document.addEventListener('DOMContentLoaded', () => {
-    const els = getEls();
-
-    // jeśli mamy supabase-client.js – pokaż krótki ping w konsoli
-    try {
-      if (window.sb) console.log('[supabase-client] OK');
-    } catch {}
-
-    attachLogin(els);
-    attachUI(els);
-
-    // auto-wznowienie sesji jeśli było zalogowane
-    if (localStorage.getItem(AUTH_KEY) === '1') {
-      showApp(els);
-      refresh(els);
-    } else {
-      showLogin(els);
-    }
+    try { if (window.sb) console.log('[supabase-client] OK'); } catch {}
+    wireLogin();
+    wireFilters();
+    wireActions();
   });
 })();
