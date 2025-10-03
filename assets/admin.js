@@ -46,7 +46,7 @@ async function fetchBookings() {
   }
 
   const { data, error } = await window.sb
-    .from("bookings")
+    .from("bookings_view")
     .select("*")
     .order("when", { ascending: true });
 
