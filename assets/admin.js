@@ -316,7 +316,7 @@
 
     const { data, error } = await window.sb
       .from('slots')
-      .select('id, when, service_name, taken')
+      .select('id, when, taken')
       .order('when', { ascending: true });
 
     if (error) { tbody.innerHTML = `<tr><td colspan="4">${error.message}</td></tr>`; return; }
@@ -326,7 +326,6 @@
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${fmtWhen(s.when)}</td>
-        <td>${s.service_name || '-'}</td>
         <td>${s.taken ? 'Zajęty' : 'Wolny'}</td>
         <td>
           <button class="btn btn-cancel" data-slot-del="${s.id}" ${s.taken ? 'disabled' : ''}>Usuń</button>
@@ -339,11 +338,17 @@
   function wireSlots() {
     $('#slot-add')?.addEventListener('click', async () => {
       const when = $('#slot-date')?.value;
-      const service = $('#slot-service')?.value?.trim();
       if (!when || !service) { alert('Podaj datę i usługę'); return; }
       const { error } = await window.sb
         .from('slots')
-        .insert({ when: new Date(when).toISOString(), service_name: service, taken: false });
+		const dt = new Date(when);
+dt.setSeconds(0, 0);
+const m = dt.getMinutes();
+const rounded = Math.round(m / 5) * 5; // 5-minutowe interwały
+dt.setMinutes(rounded);
+
+ 
+       .insert({ when: dt.toISOString(), service_name: service, taken: false });
       if (error) { alert(error.message); return; }
       $('#slot-date').value = '';
       $('#slot-service').value = '';
