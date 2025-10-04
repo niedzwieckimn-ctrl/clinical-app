@@ -36,7 +36,6 @@
   <div class="wrap">
     <header>
   <img src="assets/logo.svg" alt="" height="36" />
-  <h1 style="margin:0">Panel Admin</h1>
 </header>
 
 
@@ -58,34 +57,31 @@
   <button data-tab="clients">Klienci</button>
   <button data-tab="settings">Ustawienia</button>
 </nav>
-    <!-- Lista -->
-    <section id="list-screen" class="hidden stack">
-	<div class="table-container">
-  <table class="bookings-table">
-    <thead>
-      <tr>
-        <th>Nr</th>
-        <th>Imię i nazwisko</th>
-        <th>Termin</th>
-        <th>Akcje</th>
-      </tr>
-    </thead>
-    <tbody id="rows"></tbody>
-  </table>
-</div>
-
-<!-- MODAL Szczegóły -->
-<div id="details-modal" class="modal hidden">
-  <div class="modal-content">
-    <span id="close-details" class="modal-close">&times;</span>
-    <h3>Szczegóły rezerwacji</h3>
-    <div id="details-body"></div>
+ <section id="bookings-screen" class="hidden stack">
+  <div class="table-container">
+    <table class="bookings-table">
+      <thead>
+        <tr>
+          <th>Nr</th>
+          <th>Imię i nazwisko</th>
+          <th>Termin</th>
+          <th>Akcje</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
   </div>
-</div>
-     <section id="bookings-screen" class="hidden stack">
-  <!-- tu PRZENIEŚ dotychczasową zawartość z #list-screen -->
-  <!-- tabela rezerwacji + toolbar + modal Szczegóły (zostaje jak jest) -->
+
+  <!-- MODAL Szczegóły -->
+  <div id="details-modal" class="modal hidden">
+    <div class="modal-content">
+      <span id="close-details" class="modal-close">&times;</span>
+      <h3>Szczegóły rezerwacji</h3>
+      <div id="details-body"></div>
+    </div>
+  </div>
 </section>
+
 <section id="slots-screen" class="hidden card stack">
   <h2>Terminy (wolne sloty)</h2>
 
