@@ -35,9 +35,17 @@
 <body>
   <div class="wrap">
     <header>
-      <img src="assets/logo.svg" alt="" height="36" />
-      <h1 style="margin:0">Panel Admin</h1>
-    </header>
+  <img src="assets/logo.svg" alt="" height="36" />
+  <h1 style="margin:0">Panel Admin</h1>
+</header>
+
+<nav class="tabs card" id="top-tabs" style="display:none">
+  <button data-tab="bookings">Rezerwacje</button>
+  <button data-tab="slots">Terminy</button>
+  <button data-tab="clients">Klienci</button>
+  <button data-tab="settings">Ustawienia</button>
+</nav>
+
 
     <!-- PIN -->
     <section id="pin-screen" class="card stack">
@@ -74,23 +82,118 @@
     <div id="details-body"></div>
   </div>
 </div>
+     <section id="bookings-screen" class="hidden stack">
+  <!-- tu PRZENIEŚ dotychczasową zawartość z #list-screen -->
+  <!-- tabela rezerwacji + toolbar + modal Szczegóły (zostaje jak jest) -->
+</section>
+<section id="slots-screen" class="hidden card stack">
+  <h2>Terminy (wolne sloty)</h2>
 
-      <div class="card stack">
-        <div class="toolbar row">
-          <select id="status-filter">
-            <option value="">Wszystkie statusy</option>
-            <option value="pending">Oczekujące</option>
-            <option value="confirmed">Potwierdzone</option>
-            <option value="canceled">Anulowane</option>
-          </select>
-          <input id="q" placeholder="Szukaj: klient, e-mail, tel, usługa" />
-          <input id="from" type="date" />
-          <input id="to" type="date" />
-          <button id="refresh" class="btn">Odśwież</button>
+  <div class="row">
+    <input id="slot-date" type="datetime-local" />
+    <input id="slot-service" placeholder="Usługa (np. Masaż klasyczny 60')" />
+    <button id="slot-add" class="btn btn-confirm">Dodaj wolny termin</button>
+  </div>
+
+  <table class="bookings-table">
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th>Usługa</th>
+        <th>Status</th>
+        <th>Akcje</th>
+      </tr>
+    </thead>
+    <tbody id="slots-rows"></tbody>
+  </table>
+</section>
+<section id="clients-screen" class="hidden card stack">
+  <h2>Klienci</h2>
+
+  <div class="row">
+    <input id="client-q" placeholder="Szukaj klienta (imię, e-mail, telefon)" />
+    <button id="client-refresh" class="btn">Szukaj</button>
+    <button id="client-add" class="btn btn-details">Dodaj klienta</button>
+  </div>
+
+  <table class="bookings-table">
+    <thead>
+      <tr>
+        <th>Imię i nazwisko</th>
+        <th>E-mail</th>
+        <th>Telefon</th>
+        <th>Akcje</th>
+      </tr>
+    </thead>
+    <tbody id="clients-rows"></tbody>
+  </table>
+
+  <!-- Modal klienta -->
+  <div id="client-modal" class="modal hidden">
+    <div class="modal-content">
+      <span id="client-close" class="modal-close">&times;</span>
+      <h3 id="client-title">Karta klienta</h3>
+      <div class="stack">
+        <div class="row">
+          <input id="client-name" placeholder="Imię i nazwisko" />
+          <input id="client-email" placeholder="E-mail" />
+          <input id="client-phone" placeholder="Telefon" />
         </div>
-        <p class="muted" style="margin:0">Widok korzysta z <code>bookings_view</code>.</p>
+        <textarea id="client-preferences" placeholder="Preferencje"></textarea>
+        <textarea id="client-allergies" placeholder="Uczulenia"></textarea>
+        <textarea id="client-contras" placeholder="Przeciwwskazania"></textarea>
+        <textarea id="client-notes" placeholder="Ogólne notatki"></textarea>
+
+        <h4>Odbyte zabiegi</h4>
+        <div id="client-treatments"></div>
+
+        <div class="row">
+          <input id="treat-date" type="datetime-local" />
+          <input id="treat-service" placeholder="Usługa" />
+          <button id="treat-add" class="btn btn-confirm">Dodaj zabieg</button>
+        </div>
+
+        <h4>Notatka do wizyty</h4>
+        <textarea id="treat-note" placeholder="Notatka (opis wrażeń, reakcje, uwagi)"></textarea>
+        <button id="treat-note-add" class="btn">Dodaj notatkę do ostatniego zabiegu</button>
+
+        <h4>Sugestie terapeutyczne</h4>
+        <div id="client-suggestions" class="card" style="padding:10px"></div>
+
+        <div class="row">
+          <button id="client-save" class="btn btn-confirm">Zapisz</button>
+          <button id="client-delete" class="btn btn-cancel">Usuń klienta</button>
+        </div>
       </div>
-    </section>
+    </div>
+  </div>
+</section>
+<section id="settings-screen" class="hidden card stack">
+  <h2>Ustawienia</h2>
+
+  <label>„Zalecenia przed zabiegiem” (tekst wyświetlany klientowi)</label>
+  <textarea id="set-prep-text" rows="6" placeholder="Np. przyjdź 10 minut wcześniej…"></textarea>
+
+  <div class="row">
+    <div class="stack">
+      <label>PIN (4–8 cyfr)</label>
+      <input id="set-pin" placeholder="np. 2505" />
+    </div>
+    <div class="stack">
+      <label>E-mail kontaktowy</label>
+      <input id="set-email" placeholder="np. spa@twojadomena.pl" />
+    </div>
+    <div class="stack">
+      <label>Telefon kontaktowy</label>
+      <input id="set-phone" placeholder="np. 729 979 396" />
+    </div>
+  </div>
+
+  <div class="row">
+    <button id="settings-save" class="btn btn-confirm">Zapisz ustawienia</button>
+  </div>
+</section>
+
   </div>
   <script src="assets/send-email.js"></script>
   <script src="assets/admin.js"></script>

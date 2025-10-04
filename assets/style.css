@@ -435,3 +435,6 @@ textarea:-webkit-autofill:focus {
   cursor: pointer;
 }
 
+.btn-confirm { background:#16a34a !important; color:#fff !important; }
+.btn-cancel  { background:#dc2626 !important; color:#fff !important; }
+.btn-details { background:#607d8b !important; color:#fff !important; }
