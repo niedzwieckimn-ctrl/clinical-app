@@ -156,52 +156,52 @@ document.addEventListener('keydown', (e) => {
   window.initList = initList; // do debug
 
   // --- AKCJE: Potwierdź / Anuluj ---
-  async function confirmBooking(id) {
-    // WARIANT A (zalecany): Netlify Function z service_role
-    try {
-      const res = await fetch('/.netlify/functions/admin-confirm', {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify({ id })
-      });
-      const out = await res.text();
-      if (!res.ok) throw new Error(out);
-      try { return JSON.parse(out); } catch { return { ok:true, raw: out }; }
-    } catch (e) {
-      console.warn('[admin-confirm] funkcja nieosiągalna – fallback bezpośredni:', e);
-      // WARIANT B (fallback): bezpośrednio w DB (jeśli RLS pozwala)
-      const sb = assertSB();
-      const { error } = await sb.from('bookings')
-        .update({ status: 'Potwierdzona', confirmed_at: new Date().toISOString() })
-        .eq('id', id);
-      if (error) throw error;
-      return { ok: true };
-    }
+async function confirmBooking(id) {
+  // WARIANT A (zalecany): Netlify Function z service_role
+  try {
+    const res = await fetch('/.netlify/functions/admin-confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_no: id })   // <── tu!
+    });
+    const out = await res.text();
+    if (!res.ok) throw new Error(out);
+    try { return JSON.parse(out); } catch { return { ok: true, raw: out }; }
+  } catch (e) {
+    console.warn('[admin-confirm] funkcja niedostępna – fallback bezpośredni', e);
+    const sb = assertSB();
+    const { error } = await sb
+      .from('bookings')
+      .update({ status: 'Potwierdzona', confirmed_at: new Date().toISOString() })
+      .eq('booking_no', id);                     // <── i tu!
+    if (error) throw error;
+    return { ok: true };
   }
+}
 
-  async function cancelBooking(id) {
-    // WARIANT A: funkcja netlify
-    try {
-      const res = await fetch('/.netlify/functions/admin-cancel', {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify({ id })
-      });
-      const out = await res.text();
-      if (!res.ok) throw new Error(out);
-      try { return JSON.parse(out); } catch { return { ok:true, raw: out }; }
-    } catch (e) {
-      console.warn('[admin-cancel] funkcja nieosiągalna – fallback bezpośredni:', e);
-      // WARIANT B: bezpośrednio w DB
-      const sb = assertSB();
-      const { error } = await sb.from('bookings')
-        .update({ status: 'Anulowana', canceled_at: new Date().toISOString() })
-        .eq('id', id);
-      if (error) throw error;
-      // opcjonalnie: zwolnić slot – wymaga slot_id; w widoku go nie ma, więc pomijamy w fallbacku
-      return { ok: true };
-    }
+async function cancelBooking(id) {
+  // WARIANT A: Netlify
+  try {
+    const res = await fetch('/.netlify/functions/admin-cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_no: id })   // <── tu!
+    });
+    const out = await res.text();
+    if (!res.ok) throw new Error(out);
+    try { return JSON.parse(out); } catch { return { ok: true, raw: out }; }
+  } catch (e) {
+    console.warn('[admin-cancel] funkcja niedostępna – fallback bezpośredni', e);
+    const sb = assertSB();
+    const { error } = await sb
+      .from('bookings')
+      .update({ status: 'Anulowana', canceled_at: new Date().toISOString() })
+      .eq('booking_no', id);                     // <── i tu!
+    if (error) throw error;
+    return { ok: true };
   }
+}
+
 
   // Delegacja klików – jeden listener na całe tbody
   function wireActions() {
