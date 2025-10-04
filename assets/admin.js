@@ -1,52 +1,77 @@
-// ✅ Inicjalizacja Supabase
-function assertSB() {
-  if (!window.supabaseUrl || !window.supabaseKey) {
-    throw new Error('Brak konfiguracji Supabase (supabaseUrl / supabaseKey)');
+/* =========================================
+   Admin panel – dopasowany do Twojego HTML:
+   - #pin-screen, #pin-input, #pin-btn, #pin-err
+   - #list-screen, #rows (tbody), filtry: #status-filter #q #from #to #refresh
+   - Supabase klient: window.sb (tworzony w assets/supabase-client.js)
+   - Widok: bookings_view (kolumny: booking_no, status, when, service_name, client_name, client_email, phone, notes, created_at)
+   ========================================= */
+
+(function () {
+  // --- KONFIG ---
+  const PIN = '2505';           // PIN logowania (jak ustaliliśmy)
+  const AUTH_KEY = 'adm_ok';    // flaga w localStorage, nie zmieniaj
+
+  // --- UTIL ---
+  const $  = (s, r=document) => r.querySelector(s);
+  const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+
+  function fmtWhen(iso) {
+    try {
+      return new Date(iso).toLocaleString('pl-PL', { dateStyle:'medium', timeStyle:'short' });
+    } catch { return iso || ''; }
   }
-  if (!window.sb) {
-    window.sb = supabase.createClient(window.supabaseUrl, window.supabaseKey);
+
+  function assertSB() {
+    if (!window.sb) {
+      throw new Error('[admin] Brak Supabase client (window.sb). Upewnij się, że assets/supabase-client.js ładuje się PRZED admin.js');
+    }
+    return window.sb;
   }
-  return window.sb;
-}
 
-// ✅ Formatowanie daty i godziny
-function fmtWhen(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return d.toLocaleString('pl-PL', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-// ✅ Pobieranie listy rezerwacji
-async function fetchBookings() {
-  const sb = assertSB();
-  const { data, error } = await sb
-    .from('bookings')
-    .select('booking_no, client_name, when, service_name, client_email, phone, notes, status')
-    .order('when', { ascending: true });
-
-  if (error) {
-    console.error('Błąd pobierania rezerwacji:', error);
-    return [];
+  // --- FILTRY (lokalne) ---
+  function matchesQuery(b, q) {
+    if (!q) return true;
+    q = q.toLowerCase();
+    return [
+      b.client_name, b.client_email, b.phone, b.service_name, b.notes
+    ].some(x => (x||'').toLowerCase().includes(q));
   }
-  return data || [];
-}
+  function inRange(iso, from, to) {
+    if (!from && !to) return true;
+    const t = new Date(iso).getTime();
+    if (from && t < new Date(from).getTime()) return false;
+    if (to) {
+      const end = new Date(to); end.setHours(23,59,59,999);
+      if (t > end.getTime()) return false;
+    }
+    return true;
+  }
 
-// ✅ Render tabeli
-function renderRows(list) {
+  // --- API: pobierz listę z widoku ---
+  async function fetchBookings() {
+    const sb = assertSB();
+    const { data, error, status } = await sb
+      .from('bookings_view')
+      .select('booking_no, status, when, service_name, client_name, client_email, phone, notes, created_at')
+      .order('when', { ascending: true })
+      .limit(500);
+
+    if (error) {
+      console.error('[admin] Błąd pobierania rezerwacji:', status, error);
+      throw new Error(error.message || 'Błąd pobierania');
+    }
+    return data || [];
+  }
+  window.fetchBookings = fetchBookings; // do debug
+
+  // --- RENDER TABELI ---
+  function renderRows(list) {
   const tbody = document.getElementById('rows');
   if (!tbody) return;
   tbody.innerHTML = '';
 
   for (const b of list) {
     const tr = document.createElement('tr');
-    tr.dataset.details = JSON.stringify(b);
-
     tr.innerHTML = `
       <td>${b.booking_no || '-'}</td>
       <td>${b.client_name || '-'}</td>
@@ -57,95 +82,212 @@ function renderRows(list) {
         <button class="btn btn-details" data-action="details" data-id="${b.booking_no}">Szczegóły</button>
       </td>
     `;
+    tr.dataset.details = JSON.stringify(b);
     tbody.appendChild(tr);
   }
 }
 
-// ✅ Potwierdzenie rezerwacji
-async function confirmBooking(bookingNo) {
-  try {
-    const res = await fetch('/.netlify/functions/admin-confirm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ booking_no: bookingNo })
-    });
-    const out = await res.json();
-    if (!res.ok || !out.ok) throw new Error(out.msg || 'Błąd potwierdzenia');
-    alert('✅ Rezerwacja potwierdzona');
-    await initList();
-  } catch (err) {
-    console.error(err);
-    alert('Błąd potwierdzania rezerwacji');
-  }
-}
-
-// ✅ Anulowanie rezerwacji
-async function cancelBooking(bookingNo) {
-  try {
-    const res = await fetch('/.netlify/functions/admin-cancel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ booking_no: bookingNo })
-    });
-    const out = await res.json();
-    if (!res.ok || !out.ok) throw new Error(out.msg || 'Błąd anulowania');
-    alert('❌ Rezerwacja anulowana');
-    await initList();
-  } catch (err) {
-    console.error(err);
-    alert('Błąd anulowania rezerwacji');
-  }
-}
-
-// ✅ Obsługa kliknięć w przyciski
+// MODAL obsługa
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
+
   const action = btn.dataset.action;
   const id = btn.dataset.id;
-  const tr = btn.closest('tr');
-  const b = tr ? JSON.parse(tr.dataset.details || '{}') : {};
 
-  if (action === 'confirm') {
-    confirmBooking(id);
-  } else if (action === 'cancel') {
-    cancelBooking(id);
-  } else if (action === 'details') {
-    openModal(b);
+  if (action === 'details') {
+    const tr = btn.closest('tr');
+    const b = JSON.parse(tr.dataset.details || '{}');
+    const modal = document.getElementById('details-modal');
+    const body = document.getElementById('details-body');
+    if (modal && body) {
+      body.innerHTML = `
+        <p><b>Nr rezerwacji:</b> ${b.booking_no || ''}</p>
+        <p><b>Imię i nazwisko:</b> ${b.client_name || ''}</p>
+        <p><b>Termin:</b> ${fmtWhen(b.when)}</p>
+        <p><b>Usługa:</b> ${b.service_name || ''}</p>
+        <p><b>E-mail:</b> ${b.client_email || ''}</p>
+        <p><b>Telefon:</b> ${b.phone || ''}</p>
+        <p><b>Uwagi:</b> ${b.notes || '-'}</p>
+      `;
+      modal.classList.remove('hidden');
+    }
   }
 });
 
-// ✅ Modal szczegółów
-function openModal(b) {
-  const modal = document.getElementById('details-modal');
-  const body = document.getElementById('details-body');
-  if (!modal || !body) return;
-  body.innerHTML = `
-    <p><b>Nr rezerwacji:</b> ${b.booking_no || ''}</p>
-    <p><b>Imię i nazwisko:</b> ${b.client_name || ''}</p>
-    <p><b>Termin:</b> ${fmtWhen(b.when)}</p>
-    <p><b>Usługa:</b> ${b.service_name || ''}</p>
-    <p><b>E-mail:</b> ${b.client_email || ''}</p>
-    <p><b>Telefon:</b> ${b.phone || ''}</p>
-    <p><b>Uwagi:</b> ${b.notes || '-'}</p>
-  `;
-  modal.classList.remove('hidden');
-}
-
-// Zamknięcie modala
 document.getElementById('close-details')?.addEventListener('click', () => {
   document.getElementById('details-modal').classList.add('hidden');
 });
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     document.getElementById('details-modal').classList.add('hidden');
   }
 });
 
-// ✅ Inicjalizacja listy
-async function initList() {
-  const list = await fetchBookings();
-  renderRows(list);
+  function applyFilters(items) {
+    const status = $('#status-filter')?.value || '';
+    const q = $('#q')?.value?.trim() || '';
+    const from = $('#from')?.value || null;
+    const to   = $('#to')?.value || null;
+
+    return items.filter(b =>
+      (!status || String(b.status||'').toLowerCase() === status.toLowerCase()) &&
+      matchesQuery(b, q) &&
+      inRange(b.when, from, to)
+    );
+  }
+
+  async function initList() {
+    const btn = $('#refresh');
+    try {
+      if (btn) btn.disabled = true;
+      const data = await fetchBookings();
+      const filtered = applyFilters(data);
+      renderRows(filtered);
+    } catch (e) {
+      console.error(e);
+      const tb = $('#rows');
+      if (tb) tb.innerHTML = `<tr><td colspan="7" style="color:#b00;padding:8px;">${e.message || e}</td></tr>`;
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+  window.initList = initList; // do debug
+
+  // --- AKCJE: Potwierdź / Anuluj ---
+async function confirmBooking(id) {
+  // WARIANT A (zalecany): Netlify Function z service_role
+  try {
+    const res = await fetch('/.netlify/functions/admin-confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_no: id })   // <── tu!
+    });
+    const out = await res.text();
+    if (!res.ok) throw new Error(out);
+    try { return JSON.parse(out); } catch { return { ok: true, raw: out }; }
+  } catch (e) {
+    console.warn('[admin-confirm] funkcja niedostępna – fallback bezpośredni', e);
+    const sb = assertSB();
+    const { error } = await sb
+      .from('bookings')
+      .update({ status: 'Potwierdzona', confirmed_at: new Date().toISOString() })
+      .eq('booking_no', id);                     // <── i tu!
+    if (error) throw error;
+    return { ok: true };
+  }
 }
 
-document.addEventListener('DOMContentLoaded', initList);
+async function cancelBooking(id) {
+  // WARIANT A: Netlify
+  try {
+    const res = await fetch('/.netlify/functions/admin-cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ booking_no: id })   // <── tu!
+    });
+    const out = await res.text();
+    if (!res.ok) throw new Error(out);
+    try { return JSON.parse(out); } catch { return { ok: true, raw: out }; }
+  } catch (e) {
+    console.warn('[admin-cancel] funkcja niedostępna – fallback bezpośredni', e);
+    const sb = assertSB();
+    const { error } = await sb
+      .from('bookings')
+      .update({ status: 'Anulowana', canceled_at: new Date().toISOString() })
+      .eq('booking_no', id);                     // <── i tu!
+    if (error) throw error;
+    return { ok: true };
+  }
+}
+
+
+  // Delegacja klików – jeden listener na całe tbody
+  function wireActions() {
+    const tbody = $('#rows');
+    if (!tbody) return;
+    tbody.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const id = btn.dataset.id;
+      if (!id) return;
+
+      btn.disabled = true;
+      try {
+        if (btn.classList.contains('confirm-btn')) {
+          const res = await confirmBooking(id);
+          if (!res?.ok) throw new Error('Nie udało się potwierdzić');
+          alert('Rezerwacja potwierdzona ✅');
+        } else if (btn.classList.contains('cancel-btn')) {
+          const res = await cancelBooking(id);
+          if (!res?.ok) throw new Error('Nie udało się anulować');
+          alert('Rezerwacja anulowana ❌');
+        }
+        await initList();
+      } catch (err) {
+        console.error(err);
+        alert(`Błąd akcji: ${err.message || err}`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  // --- LOGOWANIE PIN ---
+  function wireLogin() {
+    const pinScr  = $('#pin-screen');
+    const listScr = $('#list-screen');
+    const btn     = $('#pin-btn');
+    const inp     = $('#pin-input');
+    const errBox  = $('#pin-err');
+
+    function showList() {
+      pinScr?.classList.add('hidden');
+      listScr?.classList.remove('hidden');
+      localStorage.setItem(AUTH_KEY, '1');
+      initList();
+    }
+
+    function showErr(msg) {
+      if (!errBox) return alert(msg);
+      errBox.textContent = msg;
+    }
+
+    if (localStorage.getItem(AUTH_KEY) === '1') {
+      showList();
+      return;
+    }
+
+    const enter = () => {
+      const val = String(inp?.value || '').trim();
+      if (!val) { showErr('Wpisz PIN'); return; }
+      if (val === PIN) {
+        showList();
+      } else {
+        showErr('Nieprawidłowy PIN');
+        inp?.select?.();
+      }
+    };
+
+    btn?.addEventListener('click', enter);
+    inp?.addEventListener('keydown', (e) => { if (e.key === 'Enter') enter(); });
+  }
+
+  // --- FILTRY / TOOLBAR ---
+  function wireFilters() {
+    $('#refresh')?.addEventListener('click', initList);
+    $('#status-filter')?.addEventListener('change', initList);
+    $('#q')?.addEventListener('input', () => initList());
+    $('#from')?.addEventListener('change', initList);
+    $('#to')?.addEventListener('change', initList);
+  }
+
+  // --- START ---
+  document.addEventListener('DOMContentLoaded', () => {
+    try { if (window.sb) console.log('[supabase-client] OK'); } catch {}
+    wireLogin();
+    wireFilters();
+    wireActions();
+  });
+})();
