@@ -406,4 +406,32 @@ textarea:-webkit-autofill:focus {
   font-size: 22px;
   cursor: pointer;
 }
+.btn-confirm { background:#4CAF50 !important; color:white !important; }
+.btn-cancel  { background:#f44336 !important; color:white !important; }
+.btn-details { background:#607d8b !important; color:white !important; }
+
+.modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal.hidden { display: none; }
+.modal-content {
+  background: white;
+  padding: 20px;
+  max-width: 400px;
+  width: 90%;
+  border-radius: 8px;
+}
+.modal-close {
+  position: absolute;
+  right: 15px;
+  top: 10px;
+  font-size: 20px;
+  cursor: pointer;
+}
 
