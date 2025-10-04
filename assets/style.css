@@ -325,4 +325,85 @@ textarea:-webkit-autofill:focus {
   text-align: center;
   margin-top: 4px;
 }
+.table-container {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.bookings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.bookings-table th,
+.bookings-table td {
+  padding: 8px;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.bookings-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+}
+
+.btn {
+  padding: 5px 8px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.btn-confirm {
+  background: #4CAF50;
+  color: white;
+}
+
+.btn-cancel {
+  background: #f44336;
+  color: white;
+}
+
+.btn-details {
+  background: #607d8b;
+  color: white;
+}
+
+.btn + .btn {
+  margin-left: 4px;
+}
+
+/* Modal */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 400px;
+  position: relative;
+}
+
+.modal-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 22px;
+  cursor: pointer;
+}
 

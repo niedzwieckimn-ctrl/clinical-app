@@ -66,28 +66,64 @@
 
   // --- RENDER TABELI ---
   function renderRows(list) {
-    const tbody = $('#rows');
-    if (!tbody) return;
-    tbody.innerHTML = '';
+  const tbody = document.getElementById('rows');
+  if (!tbody) return;
+  tbody.innerHTML = '';
 
-    for (const b of list) {
-      const st = (b.status || 'Oczekująca').toLowerCase();
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${fmtWhen(b.when)}</td>
-        <td>${b.client_name || '-'}</td>
-        <td>${b.service_name || '-'}</td>
-        <td><span class="status ${st}">${b.status || 'Oczekująca'}</span></td>
-        <td>${b.phone || '-'}</td>
-        <td>${b.client_email || '-'}</td>
-        <td>
-          ${st.startsWith('oczek') || st === 'pending' ? `<button class="btn confirm-btn" data-id="${b.booking_no}">Potwierdź</button>` : ''}
-          ${st !== 'anulowana' && st !== 'canceled' ? `<button class="btn cancel-btn" data-id="${b.booking_no}">Anuluj</button>` : ''}
-        </td>
+  for (const b of list) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${b.booking_no || '-'}</td>
+      <td>${b.client_name || '-'}</td>
+      <td>${fmtWhen(b.when)}</td>
+      <td>
+        <button class="btn btn-confirm" data-action="confirm" data-id="${b.booking_no}">Potwierdź</button>
+        <button class="btn btn-cancel" data-action="cancel" data-id="${b.booking_no}">Anuluj</button>
+        <button class="btn btn-details" data-action="details" data-id="${b.booking_no}">Szczegóły</button>
+      </td>
+    `;
+    tr.dataset.details = JSON.stringify(b);
+    tbody.appendChild(tr);
+  }
+}
+
+// MODAL obsługa
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+
+  const action = btn.dataset.action;
+  const id = btn.dataset.id;
+
+  if (action === 'details') {
+    const tr = btn.closest('tr');
+    const b = JSON.parse(tr.dataset.details || '{}');
+    const modal = document.getElementById('details-modal');
+    const body = document.getElementById('details-body');
+    if (modal && body) {
+      body.innerHTML = `
+        <p><b>Nr rezerwacji:</b> ${b.booking_no || ''}</p>
+        <p><b>Imię i nazwisko:</b> ${b.client_name || ''}</p>
+        <p><b>Termin:</b> ${fmtWhen(b.when)}</p>
+        <p><b>Usługa:</b> ${b.service_name || ''}</p>
+        <p><b>E-mail:</b> ${b.client_email || ''}</p>
+        <p><b>Telefon:</b> ${b.phone || ''}</p>
+        <p><b>Uwagi:</b> ${b.notes || '-'}</p>
       `;
-      tbody.appendChild(tr);
+      modal.classList.remove('hidden');
     }
   }
+});
+
+document.getElementById('close-details')?.addEventListener('click', () => {
+  document.getElementById('details-modal').classList.add('hidden');
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.getElementById('details-modal').classList.add('hidden');
+  }
+});
 
   function applyFilters(items) {
     const status = $('#status-filter')?.value || '';

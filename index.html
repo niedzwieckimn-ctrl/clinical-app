@@ -52,6 +52,29 @@
 
     <!-- Lista -->
     <section id="list-screen" class="hidden stack">
+	<div class="table-container">
+  <table class="bookings-table">
+    <thead>
+      <tr>
+        <th>Nr</th>
+        <th>Imię i nazwisko</th>
+        <th>Termin</th>
+        <th>Akcje</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+
+<!-- MODAL Szczegóły -->
+<div id="details-modal" class="modal hidden">
+  <div class="modal-content">
+    <span id="close-details" class="modal-close">&times;</span>
+    <h3>Szczegóły rezerwacji</h3>
+    <div id="details-body"></div>
+  </div>
+</div>
+
       <div class="card stack">
         <div class="toolbar row">
           <select id="status-filter">
@@ -86,7 +109,7 @@
       </div>
     </section>
   </div>
-
+  <script src="assets/send-email.js"></script>
   <script src="assets/admin.js"></script>
 </body>
 </html>
