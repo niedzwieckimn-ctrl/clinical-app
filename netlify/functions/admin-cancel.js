@@ -81,3 +81,30 @@ export async function handler(event) {
     return { statusCode: 500, body: JSON.stringify({ ok:false, error: String(e) }) };
   }
 }
+// netlify/functions/admin-confirm.js
+import { createClient } from '@supabase/supabase-js';
+
+export const handler = async (event) => {
+  try {
+    const { booking_no } = JSON.parse(event.body || '{}');
+    if (!booking_no) return resp(400, { ok:false, msg:'Missing booking_no' });
+
+    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE);
+
+    const { error } = await sb
+      .from('bookings')
+      .update({ status: 'Potwierdzona', confirmed_at: new Date().toISOString() })
+      .eq('booking_no', booking_no);        // <── kluczowe
+
+    if (error) return resp(500, { ok:false, msg:error.message });
+    return resp(200, { ok:true });
+  } catch (e) {
+    return resp(500, { ok:false, msg:String(e) });
+  }
+};
+
+const resp = (status, body) => ({
+  statusCode: status,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+});
