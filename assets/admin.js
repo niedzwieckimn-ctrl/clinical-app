@@ -101,31 +101,39 @@ function toMapsHref(address){
   }
 
   function renderBookingsRows(list) {
-    const tbody = $('#rows'); if (!tbody) return;
-    tbody.innerHTML = '';
-    if (!list.length) {
-      const tr=document.createElement('tr');
-      tr.innerHTML='<td colspan="4">Brak rezerwacji</td>';
-      tbody.appendChild(tr);
-      return;
-    }
-    for (const b of list) {
-      const tr=document.createElement('tr');
-      tr.innerHTML = `
-        <td>${b.booking_no || '-'}</td>
-        <td>${b.client_name || '-'}</td>
-        <td>${fmtWhen(b.when)}</td>
-        <td>
-<button class="btn" data-action="confirm" ...>Potwierdź</button>
-<button class="btn" data-action="cancel"  ...>Anuluj</button>
-<button class="btn" data-action="details" ...>Szczegóły</button>
+  const tbody = document.getElementById('rows');
+  if (!tbody) return;
+  tbody.innerHTML = '';
 
-
-        </td>`;
-      tr.dataset.details = JSON.stringify(b);
-      tbody.appendChild(tr);
-    }
+  if (!list.length) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="4">Brak rezerwacji</td>';
+    tbody.appendChild(tr);
+    return;
   }
+
+  for (const b of list) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${b.booking_no || '-'}</td>
+      <td>${b.client_name || '-'}</td>
+      <td>${fmtWhen(b.when)}</td>
+      <td>
+        <button class="btn btn-confirm"
+                style="background:#16a34a;color:#fff;border-color:#128a3f"
+                data-action="confirm" data-id="${b.booking_no}">Potwierdź</button>
+        <button class="btn btn-cancel"
+                style="background:#dc2626;color:#fff;border-color:#b31f1f"
+                data-action="cancel" data-id="${b.booking_no}">Usuń</button>
+        <button class="btn btn-details"
+                style="background:#607d8b;color:#fff;border-color:#546e7a"
+                data-action="details" data-id="${b.booking_no}">Szczegóły</button>
+      </td>`;
+    tr.dataset.details = JSON.stringify(b);
+    tbody.appendChild(tr);
+  }
+}
+
 
   async function initBookings() {
     try { renderBookingsRows(await fetchBookings()); }
@@ -143,26 +151,20 @@ function toMapsHref(address){
     $('#to')?.addEventListener('change', initBookings);
   })();
 
-  async function confirmBooking(booking_no) {
+async function confirmBooking(booking_no) {
   try {
     const res = await fetch('/.netlify/functions/admin-confirm', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ booking_no })
     });
-
     const text = await res.text();
-    if (!res.ok) {
-      // pokaż co przyszło z funkcji
-      throw new Error(text || `HTTP ${res.status}`);
-    }
-    // spróbuj zdekodować JSON
+    if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
     let out = {};
-    try { out = JSON.parse(text || '{}'); } catch { /* ignoruj */ }
+    try { out = JSON.parse(text || '{}'); } catch {}
     return out;
   } catch (e) {
-    console.warn('[admin-confirm] problem, używam fallbacku:', e);
-    // Fallback bez e-maili – bezpiecznie zmieniamy status od razu w Supabase:
+    console.warn('[admin-confirm] problem, fallback bez funkcji:', e);
     const { error } = await window.sb
       .from('bookings')
       .update({ status:'Potwierdzona', confirmed_at:new Date().toISOString() })
@@ -171,6 +173,7 @@ function toMapsHref(address){
     return { ok:true, fallback:true };
   }
 }
+
 
 
   async function cancelBooking(booking_no) {
@@ -196,35 +199,36 @@ function toMapsHref(address){
       const btn = e.target.closest('[data-action]'); if (!btn) return;
       const action = btn.dataset.action; const id = btn.dataset.id;
 
-      if (action==='details') {
-        const tr = btn.closest('tr');
-        const b = JSON.parse(tr.dataset.details||'{}');
-        const modal = $('#details-modal');
-        const body = $('#details-body');
-        if (modal && body) {
-         const addrParts = [
-  b.address,            // jeśli masz kolumnę address
-  b.client_address,     // albo client_address
-  b.place_address,      // albo place_address
-  b.street && b.city ? `${b.street}, ${b.city}` : null // z pól street/city
-].filter(Boolean);
-const addr  = addrParts[0] || '';
-const email = b.client_email || b.email || '';
-const phone = b.phone || b.client_phone || '';
+      if (action === 'details') {
+  // PODMIEŃ cały ten blok na:
+  const tr = btn.closest('tr');
+  const b = JSON.parse(tr.dataset.details || '{}');
 
-const mapH  = addr ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}` : '';
-const mailH = email ? `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent('Rezerwacja potwierdzona')}` : '';
-const telH  = phone ? `tel:${String(phone).replace(/[^\d+]/g,'')}` : '';
+  const addr  = b.address || '';
+  const email = b.client_email || b.email || '';
+  const phone = b.phone || b.client_phone || '';
 
-body.innerHTML = `
-  <p><b>Nr rezerwacji:</b> ${b.booking_no || ''}</p>
-  <p><b>Imię i nazwisko:</b> ${b.client_name || ''}</p>
-  <p><b>Termin:</b> ${fmtWhen(b.when)}</p>
-  <p><b>Usługa:</b> ${b.service_name || ''}</p>
-  <p><b>Adres:</b> ${addr ? `<a href="${mapH}" target="_blank" rel="noopener">${addr}</a>` : '-'}</p>
-  <p><b>E-mail:</b> ${email ? `<a href="${mailH}">${email}</a>` : '-'}</p>
-  <p><b>Telefon:</b> ${phone ? `<a href="${telH}">${phone}</a>` : '-'}</p>
-  <p><b>Uwagi:</b> ${b.notes || '-'}</p>`;
+  const mapH  = addr  ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}` : '';
+  const mailH = email ? `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent('Rezerwacja potwierdzona')}` : '';
+  const telH  = phone ? `tel:${String(phone).replace(/[^\d+]/g,'')}` : '';
+
+  const modal = document.getElementById('details-modal');
+  const body  = document.getElementById('details-body');
+  if (modal && body) {
+    body.innerHTML = `
+      <p><b>Nr rezerwacji:</b> ${b.booking_no || ''}</p>
+      <p><b>Imię i nazwisko:</b> ${b.client_name || ''}</p>
+      <p><b>Termin:</b> ${fmtWhen(b.when)}</p>
+      <p><b>Usługa:</b> ${b.service_name || ''}</p>
+      <p><b>Adres:</b> ${addr ? `<a href="${mapH}" target="_blank" rel="noopener">${addr}</a>` : '-'}</p>
+      <p><b>E-mail:</b> ${email ? `<a href="${mailH}">${email}</a>` : '-'}</p>
+      <p><b>Telefon:</b> ${phone ? `<a href="${telH}">${phone}</a>` : '-'}</p>
+      <p><b>Uwagi:</b> ${b.notes || '-'}</p>`;
+    modal.classList.remove('hidden');
+  }
+  return;
+}
+
 
 
 
