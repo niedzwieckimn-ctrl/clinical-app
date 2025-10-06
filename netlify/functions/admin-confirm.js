@@ -30,10 +30,11 @@ export const handler = async (event) => {
 
     // Update statusu w tabeli
     const { error: updErr } = await sb
-      .from('bookings')
-      .update({ status: 'Potwierdzona', confirmed_at: new Date().toISOString() })
-      .eq('booking_no', booking_no);
-    if (updErr) return json(500, { error: updErr.message });
+  .from('bookings')
+  .update({ status: 'Potwierdzona', confirmed_at: new Date().toISOString() })
+  .eq('booking_no', booking_no);
+if (updErr) return json(500, { error: updErr.message });
+
 
     // Email – ta sama treść do klienta i masażystki
     const whenStr = new Date(booking.when).toLocaleString('pl-PL', { dateStyle: 'full', timeStyle: 'short' });

@@ -169,16 +169,15 @@ function toMapsHref(address){
     try { out = JSON.parse(text || '{}'); } catch { /* ignoruj */ }
     return out;
   } catch (e) {
-    console.warn('[admin-confirm] problem, używam fallbacku:', e);
-    // Fallback bez e-maili – bezpiecznie zmieniamy status od razu w Supabase:
-    const { error } = await window.sb
-      .from('bookings')
-      .update({ status:'Potwierdzona', confirmed_at:new Date().toISOString() })
-      .eq('booking_no', booking_no);
-    if (error) throw error;
-    return { ok:true, fallback:true };
-  }
+  console.warn('[admin-confirm] fallback (bez funkcji):', e);
+  const { error } = await window.sb
+    .from('bookings')
+    .update({ status: 'Potwierdzona', confirmed_at: new Date().toISOString() })
+    .eq('booking_no', booking_no);
+  if (error) throw error;
+  return { ok: true, fallback: true };
 }
+
 
 
   async function cancelBooking(booking_no) {
@@ -192,12 +191,15 @@ function toMapsHref(address){
       if (!res.ok) throw new Error(out);
       return JSON.parse(out);
     } catch (e) {
-      const { error } = await window.sb.from('bookings')
-        .update({ status:'Anulowana', canceled_at:new Date().toISOString() })
-        .eq('booking_no', booking_no);
-      if (error) throw error; return { ok:true, fallback:true };
-    }
-  }
+  console.warn('[admin-cancel] fallback (bez funkcji):', e);
+  const { error } = await window.sb
+    .from('bookings')
+    .update({ status: 'Anulowana', canceled_at: new Date().toISOString() })
+    .eq('booking_no', booking_no);
+  if (error) throw error;
+  return { ok: true, fallback: true };
+}
+
 
   (function wireGlobalActions(){
     document.addEventListener('click', async (e) => {

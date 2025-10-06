@@ -43,11 +43,11 @@ export async function handler(event) {
 
     // update status
     const { error: updErr } = await sb
-      .from('bookings')
-      .update({ status: 'canceled', canceled_at: new Date().toISOString() })
-      .eq('booking_no', id);
+  .from('bookings')
+  .update({ status: 'Anulowana', canceled_at: new Date().toISOString() })
+  .eq('booking_no', booking_no);
+if (updErr) return json(500, { error: updErr.message });
 
-    if (updErr) return { statusCode: 500, body: JSON.stringify({ error: updErr }) };
 
     // zwolnij slot
     if (bRow?.slot_id) {
