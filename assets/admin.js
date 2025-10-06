@@ -83,22 +83,33 @@ function toMapsHref(address){
   }
 
   // --- BOOKINGS -------------------------------------------------------------
-  async function fetchBookings() {
-    const status = $('#status-filter')?.value || '';
-    const q      = $('#q')?.value?.trim() || '';
-    const from   = $('#from')?.value || '';
-    const to     = $('#to')?.value || '';
+ async function fetchBookings() {
+  const nowIso = new Date().toISOString();
+  let q = window.sb.from('bookings_view')
+    .select('*')
+    .order('when', { ascending: true });
 
-    let qry = window.sb.from('bookings_view').select('*').order('when', { ascending:true });
-    if (status) qry = qry.eq('status', status);
-    if (from)   qry = qry.gte('when', new Date(from).toISOString());
-    if (to)     { const end = new Date(to); end.setDate(end.getDate()+1); qry = qry.lt('when', end.toISOString()); }
-    if (q)      qry = qry.or(`client_name.ilike.%${q}%,client_email.ilike.%${q}%,phone.ilike.%${q}%,service_name.ilike.%${q}%`);
+  // 1) Nie pokazuj anulowanych
+  q = q.neq('status', 'Anulowana');
 
-    const { data, error } = await qry;
-    if (error) throw error;
-    return data||[];
+  // 2) Nie pokazuj przeterminowanych (wszystko, co w przeszłości)
+  q = q.gte('when', nowIso);
+
+  // (opcjonalnie) filtr statusu z selecta, gdy chcesz go respektować
+  const s = document.getElementById('status-filter')?.value || '';
+  if (s) q = q.eq('status', s);
+
+  // (opcjonalnie) prosty search po imieniu/mailu
+  const term = (document.getElementById('search')?.value || '').trim();
+  if (term) {
+    q = q.or(`client_name.ilike.%${term}%,client_email.ilike.%${term}%`);
   }
+
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
 
   function renderBookingsRows(list) {
   const tbody = document.getElementById('rows');
@@ -112,26 +123,40 @@ function toMapsHref(address){
     return;
   }
 
-  for (const b of list) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${b.booking_no || '-'}</td>
-      <td>${b.client_name || '-'}</td>
-      <td>${fmtWhen(b.when)}</td>
-      <td>
-        <button class="btn btn-confirm"
-                style="background:#16a34a;color:#fff;border-color:#128a3f"
-                data-action="confirm" data-id="${b.booking_no}">Potwierdź</button>
-        <button class="btn btn-cancel"
-                style="background:#dc2626;color:#fff;border-color:#b31f1f"
-                data-action="cancel" data-id="${b.booking_no}">Usuń</button>
-        <button class="btn btn-details"
-                style="background:#607d8b;color:#fff;border-color:#546e7a"
-                data-action="details" data-id="${b.booking_no}">Szczegóły</button>
-      </td>`;
-    tr.dataset.details = JSON.stringify(b);
-    tbody.appendChild(tr);
-  }
+for (const b of list) {
+  const isConfirmed = (b.status === 'Potwierdzona');
+  const badge = isConfirmed
+    ? '<span class="status confirmed">Potwierdzona</span>'
+    : '<span class="status pending">Oczekująca</span>';
+
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td>${b.booking_no || '-'}</td>
+    <td>${b.client_name || '-'}</td>
+    <td>${fmtWhen(b.when)}</td>
+    <td>${badge}</td>
+    <td>
+      <button class="btn btn-confirm"
+              style="background:#16a34a;color:#fff;border-color:#128a3f"
+              data-action="confirm" data-id="${b.booking_no}"
+              ${isConfirmed ? 'disabled' : ''}>
+        Potwierdź
+      </button>
+      <button class="btn btn-cancel"
+              style="background:#dc2626;color:#fff;border-color:#b31f1f"
+              data-action="cancel" data-id="${b.booking_no}">
+        Usuń
+      </button>
+      <button class="btn btn-details"
+              style="background:#607d8b;color:#fff;border-color:#546e7a"
+              data-action="details" data-id="${b.booking_no}">
+        Szczegóły
+      </button>
+    </td>`;
+  tr.dataset.details = JSON.stringify(b);
+  tbody.appendChild(tr);
+}
+
 }
 
 
