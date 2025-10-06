@@ -26,11 +26,13 @@ export const handler = async (event) => {
     if (getErr || !booking) return json(404, { error: 'Booking not found', details: getErr });
 
     // 2) Zmień status + znacznik czasu
-    const { error: updErr } = await sb
-      .from('bookings')
-      .update({ status: 'Anulowana', canceled_at: new Date().toISOString() })
-      .eq('booking_no', booking_no);
-    if (updErr) return json(500, { error: updErr.message });
+    // najpierw złap dane (już masz je w 'booking'), potem usuń rekord
+const { error: delErr } = await sb
+  .from('bookings')
+  .delete()
+  .eq('booking_no', booking_no);
+if (delErr) return json(500, { error: delErr.message });
+
 	// 2a) ZWOLNIJ SLOT (taken=false)
 try {
   // jeśli masz slot_id w bookings – użyj go (lepsze dopasowanie)

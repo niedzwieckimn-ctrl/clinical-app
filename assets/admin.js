@@ -197,9 +197,9 @@ for (const b of list) {
     console.warn('[admin-confirm] problem, używam fallbacku:', e);
     // Fallback bez e-maili – bezpiecznie zmieniamy status od razu w Supabase:
     const { error } = await window.sb
-      .from('bookings')
-      .update({ status:'Potwierdzona', confirmed_at:new Date().toISOString() })
-      .eq('booking_no', booking_no);
+  .from('bookings')
+  .delete()
+  .eq('booking_no', booking_no);
     if (error) throw error;
     return { ok:true, fallback:true };
   }
