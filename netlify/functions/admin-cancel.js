@@ -1,110 +1,98 @@
+// netlify/functions/admin-cancel.js
 import { createClient } from '@supabase/supabase-js';
 
-const THERAPIST_EMAIL = process.env.THERAPIST_EMAIL || 'niedzwiecki.mn@gmail.com';
-
-async function sendEmail({ to, subject, html, text }) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.FROM_EMAIL || 'onboarding@resend.dev';
-  const payload = { from, to, subject, html: html || `<pre>${text||''}</pre>`, text };
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method:'POST',
-    headers: { 'Authorization':`Bearer ${apiKey}`, 'Content-Type':'application/json' },
-    body: JSON.stringify(payload)
-  });
-  if (!res.ok) throw new Error('Email send failed: ' + (await res.text()));
-}
-
-export async function handler(event) {
-  try {
-    const { SUPABASE_URL, SUPABASE_SERVICE_ROLE } = process.env;
-    const { id } = JSON.parse(event.body || '{}'); // booking_no
-    if (!id) return { statusCode: 400, body: 'Missing booking id' };
-
-    const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
-
-    // znajdź slot_id + dane do e-maila
-    const { data: booking, error: getErr } = await sb
-      .from('bookings_view')
-      .select('booking_no, when, service_name, client_name, client_email, phone')
-      .eq('booking_no', id)
-      .single();
-
-    if (getErr || !booking) return { statusCode: 404, body: JSON.stringify({ error: 'Booking not found', details: getErr }) };
-
-    // pobierz slot_id z bookings (bo widok go nie ma)
-    const { data: bRow, error: bErr } = await sb
-      .from('bookings')
-      .select('slot_id')
-      .eq('booking_no', id)
-      .single();
-
-    if (bErr) return { statusCode: 500, body: JSON.stringify({ error: bErr }) };
-
-    // update status
-    const { error: updErr } = await sb
-      .from('bookings')
-      .update({ status: 'canceled', canceled_at: new Date().toISOString() })
-      .eq('booking_no', id);
-
-    if (updErr) return { statusCode: 500, body: JSON.stringify({ error: updErr }) };
-
-    // zwolnij slot
-    if (bRow?.slot_id) {
-      const { error: slotErr } = await sb
-        .from('slots')
-        .update({ taken: false })
-        .eq('id', bRow.slot_id);
-      if (slotErr) return { statusCode: 500, body: JSON.stringify({ error: slotErr }) };
-    }
-
-    // e-mail
-    const whenStr = new Date(booking.when).toLocaleString('pl-PL', { dateStyle:'full', timeStyle:'short' });
-    const subject = `❌ Rezerwacja anulowana – ${booking.service_name}`;
-    const html = `
-      <h2>Rezerwacja anulowana</h2>
-      <p><b>Klient:</b> ${booking.client_name || '-'}<br/>
-         <b>Data:</b> ${whenStr}<br/>
-         <b>Usługa:</b> ${booking.service_name}</p>
-      <p>Telefon: ${booking.phone || '-'} • E-mail: ${booking.client_email || '-'}</p>
-      <p>Jeśli to pomyłka, prosimy o kontakt.</p>
-    `;
-
-    await sendEmail({
-      to: [booking.client_email, THERAPIST_EMAIL],
-      subject,
-      html
-    });
-
-    return { statusCode: 200, body: JSON.stringify({ ok: true }) };
-  } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ ok:false, error: String(e) }) };
-  }
-}
-// netlify/functions/admin-confirm.js
-import { createClient } from '@supabase/supabase-js';
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
 
 export const handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS };
+  if (event.httpMethod !== 'POST') return json(405, { error: 'Method Not Allowed' });
+
   try {
     const { booking_no } = JSON.parse(event.body || '{}');
-    if (!booking_no) return resp(400, { ok:false, msg:'Missing booking_no' });
+    if (!booking_no) return json(400, { error: 'Brak booking_no' });
 
-    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE);
+    const sb = adminClient();
 
-    const { error } = await sb
+    // 1) Pobierz dane rezerwacji (z widoku z address, itp.)
+    const { data: booking, error: getErr } = await sb
+      .from('bookings_view')
+      .select('booking_no, when, service_name, client_name, client_email, phone, address')
+      .eq('booking_no', booking_no)
+      .single();
+    if (getErr || !booking) return json(404, { error: 'Booking not found', details: getErr });
+
+    // 2) Zmień status + znacznik czasu
+    const { error: updErr } = await sb
       .from('bookings')
-      .update({ status: 'Potwierdzona', confirmed_at: new Date().toISOString() })
-      .eq('booking_no', booking_no);        // <── kluczowe
+      .update({ status: 'Anulowana', canceled_at: new Date().toISOString() })
+      .eq('booking_no', booking_no);
+    if (updErr) return json(500, { error: updErr.message });
 
-    if (error) return resp(500, { ok:false, msg:error.message });
-    return resp(200, { ok:true });
+    // 3) E-mail — ta sama treść do klienta i masażystki
+    const whenStr = new Date(booking.when).toLocaleString('pl-PL', { dateStyle: 'full', timeStyle: 'short' });
+    const subject = `❌ Rezerwacja anulowana – ${booking.service_name || 'wizyta'}`;
+    const html = `
+      <h2>Rezerwacja anulowana</h2>
+      <p><b>Nr:</b> ${escapeHtml(booking.booking_no || '')}</p>
+      <p><b>Klient:</b> ${escapeHtml(booking.client_name || '-')}</p>
+      <p><b>Data:</b> ${escapeHtml(whenStr)}</p>
+      <p><b>Usługa:</b> ${escapeHtml(booking.service_name || '-')}</p>
+      <p><b>Adres:</b> ${escapeHtml(booking.address || '-')}</p>
+      <p>W razie pytań prosimy o kontakt z recepcją.</p>
+    `;
+
+    let recipients = Array.from(new Set([
+      (booking.client_email || '').trim().toLowerCase(),
+      (process.env.THERAPIST_EMAIL || '').trim().toLowerCase(),
+    ].filter(Boolean)));
+
+    // Tryb DEV (opcjonalnie)
+    if (process.env.EMAIL_DEV_ONLY === '1') {
+      recipients = [
+        (process.env.DEV_EMAIL || process.env.THERAPIST_EMAIL || '').trim().toLowerCase()
+      ].filter(Boolean);
+    }
+
+    for (const to of recipients) {
+      await sendEmail({ to, subject, html });
+    }
+
+    return json(200, { ok: true });
   } catch (e) {
-    return resp(500, { ok:false, msg:String(e) });
+    return json(500, { error: String(e?.message || e) });
   }
 };
 
-const resp = (status, body) => ({
-  statusCode: status,
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body),
-});
+// --- helpers ---
+function adminClient() {
+  const url = process.env.SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE;
+  if (!url || !key) throw new Error('Brak SUPABASE_URL lub SUPABASE_SERVICE_ROLE(_KEY)');
+  return createClient(url, key, { auth: { persistSession: false } });
+}
+function json(status, body) {
+  return { statusCode: status, headers: { 'Content-Type': 'application/json', ...CORS }, body: JSON.stringify(body) };
+}
+function escapeHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+async function sendEmail({ to, subject, html, text }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  // Użyj zweryfikowanego nadawcy w Twojej domenie:
+  const from = process.env.FROM_EMAIL || 'rezerwacje@massagesandspa.pl';
+  if (!apiKey) throw new Error('Brak RESEND_API_KEY');
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to, subject, html, text })
+  });
+  if (!res.ok) {
+    const out = await res.text();
+    throw new Error(`Resend error: ${out}`);
+  }
+}
