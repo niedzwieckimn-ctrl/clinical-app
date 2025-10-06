@@ -49,7 +49,7 @@ export const handler = async (event) => {
 
     const subject = `✅ Rezerwacja potwierdzona! – ${booking.service_name || 'wizyta'}`;
     const html = `
-  <p>Dziękujemy za dokonanie rezerwacji w <strong>Massage &amp; SPA</strong>.</p>
+  <p>Dziękujemy za dokonanie rezerwacji w <strong>Massages &amp; SPA</strong>.</p>
 
   <p>
   📅 <strong>Termin:</strong> ${whenStr}<br>
@@ -76,7 +76,7 @@ export const handler = async (event) => {
   </p>
 
   <p>Do zobaczenia w Twoim domu!<br>
-  Zespół <strong>Massage &amp; SPA</strong></p>
+  Zespół <strong>Massages &amp; SPA</strong></p>
 
     `;
 
