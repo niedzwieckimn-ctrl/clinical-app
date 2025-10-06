@@ -282,20 +282,36 @@ for (const b of list) {
 
   // --- SLOTS (bez usługi, zaokrąglanie do 5 min) ----------------------------
   async function loadSlots() {
-    const tbody = $('#slots-rows'); if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="3">Ładowanie…</td></tr>';
-    const { data, error } = await window.sb.from('slots').select('id, when, taken').order('when', { ascending:true });
-    if (error) { tbody.innerHTML = `<tr><td colspan="3">${error.message}</td></tr>`; return; }
-    tbody.innerHTML = '';
-    for (const s of (data||[])) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${fmtWhen(s.when)}</td>
-        <td>${s.taken ? 'Zajęty' : 'Wolny'}</td>
-        <td><button class="btn" data-slot-del="${s.id}" ${s.taken ? 'disabled':''}>Usuń</button></td>`;
-      tbody.appendChild(tr);
-    }
+  const tbody = document.getElementById('slots-rows'); if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="3">Ładowanie…</td></tr>';
+
+  const nowIso = new Date().toISOString();
+
+  const { data, error } = await window.sb
+    .from('slots')
+    .select('id, when, taken')
+    .gte('when', nowIso)                // <— POKAZUJEMY TYLKO PRZYSZŁE
+    .order('when', { ascending:true });
+
+  if (error) { tbody.innerHTML = `<tr><td colspan="3">${error.message}</td></tr>`; return; }
+
+  tbody.innerHTML = '';
+  for (const s of (data || [])) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fmtWhen(s.when)}</td>
+      <td>${s.taken ? 'Zajęty' : 'Wolny'}</td>
+      <td><button class="btn" data-slot-del="${s.id}" ${s.taken ? 'disabled':''}>Usuń</button></td>`;
+    tbody.appendChild(tr);
   }
+
+  if (!data || data.length === 0) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="3">Brak przyszłych terminów</td>';
+    tbody.appendChild(tr);
+  }
+}
+
 
   (function wireSlots(){
     $('#slot-add')?.addEventListener('click', async () => {
