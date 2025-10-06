@@ -47,7 +47,7 @@ export const handler = async (event) => {
 });
 
 
-    const subject = `✅ Rezerwacja potwierdzona – ${booking.service_name || 'wizyta'}`;
+    const subject = `✅ Rezerwacja potwierdzona! – ${booking.service_name || 'wizyta'}`;
     const html = `
   <p>Dziękujemy za dokonanie rezerwacji w <strong>Massage &amp; SPA</strong>.</p>
 
@@ -57,7 +57,7 @@ export const handler = async (event) => {
   📍 <strong>Adres:</strong> ${booking.address}
   </p>
 
-  <p>Aby masaż przebiegł komfortowo i sprawnie, prosimy o przygotowanie miejsca według poniższych wskazówek:</p>
+  <p>Aby masaż przebiegł komfortowo i sprawnie, prosimy o przygotowanie się według poniższych wskazówek:</p>
 
   <ul>
     <li>🛋 <strong>Przygotuj przestrzeń</strong> — najlepiej ok. 2 × 3 m wolnego miejsca, aby można było ustawić stół i swobodnie się poruszać.</li>

@@ -217,12 +217,43 @@ for (const b of list) {
       if (!res.ok) throw new Error(out);
       return JSON.parse(out);
     } catch (e) {
-      const { error } = await window.sb.from('bookings')
-        .update({ status:'Anulowana', canceled_at:new Date().toISOString() })
-        .eq('booking_no', booking_no);
-      if (error) throw error; return { ok:true, fallback:true };
+  console.warn('[admin-cancel] fallback (bez funkcji):', e);
+
+  // 1) pobierz when (i ewentualnie slot_id) z widoku
+  const { data: b, error: gErr } = await window.sb
+    .from('bookings_view')
+    .select('when, slot_id')
+    .eq('booking_no', booking_no)
+    .single();
+  if (gErr) throw gErr;
+
+  // 2) oznacz rezerwację jako anulowaną
+  const { error: updErr } = await window.sb
+    .from('bookings')
+    .update({ status: 'Anulowana', canceled_at: new Date().toISOString() })
+    .eq('booking_no', booking_no);
+  if (updErr) throw updErr;
+
+  // 3) zwolnij slot
+  try {
+    if (b?.slot_id) {
+      await window.sb.from('slots').update({ taken: false }).eq('id', b.slot_id);
+    } else {
+      const { error: freeErr } = await window.sb
+        .from('slots')
+        .update({ taken: false })
+        .eq('when', b.when);
+      if (freeErr && new Date(b.when) > new Date()) {
+        await window.sb.from('slots').insert({ when: b.when, taken: false });
+      }
     }
+  } catch (e2) {
+    console.log('[fallback] free slot warn:', e2?.message || e2);
   }
+
+  return { ok: true, fallback: true };
+}
+
 
   (function wireGlobalActions(){
     document.addEventListener('click', async (e) => {

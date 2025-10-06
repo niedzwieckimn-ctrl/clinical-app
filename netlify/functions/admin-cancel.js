@@ -31,6 +31,29 @@ export const handler = async (event) => {
       .update({ status: 'Anulowana', canceled_at: new Date().toISOString() })
       .eq('booking_no', booking_no);
     if (updErr) return json(500, { error: updErr.message });
+	// 2a) ZWOLNIJ SLOT (taken=false)
+try {
+  // jeśli masz slot_id w bookings – użyj go (lepsze dopasowanie)
+  if (booking.slot_id) {
+    await sb.from('slots').update({ taken: false }).eq('id', booking.slot_id);
+  } else {
+    // w przeciwnym razie po dacie
+    const { error: freeErr } = await sb
+      .from('slots')
+      .update({ taken: false })
+      .eq('when', booking.when);
+    if (freeErr) {
+      // jeśli nie ma rekordu slota (np. został uprzątnięty) – odtwórz go jako wolny, ale tylko jeśli to przyszłość
+      if (new Date(booking.when) > new Date()) {
+        await sb.from('slots').insert({ when: booking.when, taken: false });
+      }
+    }
+  }
+} catch (e) {
+  // nie blokuj anulowania przy błędzie zwalniania slota – tylko zaloguj
+  console.log('[admin-cancel] free slot warning:', e?.message || e);
+}
+
 
     // 3) E-mail — ta sama treść do klienta i masażystki
     const whenStr = new Date(booking.when).toLocaleString('pl-PL', { dateStyle: 'full', timeStyle: 'short' });
