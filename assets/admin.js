@@ -151,20 +151,26 @@ function toMapsHref(address){
     $('#to')?.addEventListener('change', initBookings);
   })();
 
-async function confirmBooking(booking_no) {
+  async function confirmBooking(booking_no) {
   try {
     const res = await fetch('/.netlify/functions/admin-confirm', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ booking_no })
     });
+
     const text = await res.text();
-    if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+    if (!res.ok) {
+      // pokaż co przyszło z funkcji
+      throw new Error(text || `HTTP ${res.status}`);
+    }
+    // spróbuj zdekodować JSON
     let out = {};
-    try { out = JSON.parse(text || '{}'); } catch {}
+    try { out = JSON.parse(text || '{}'); } catch { /* ignoruj */ }
     return out;
   } catch (e) {
-    console.warn('[admin-confirm] problem, fallback bez funkcji:', e);
+    console.warn('[admin-confirm] problem, używam fallbacku:', e);
+    // Fallback bez e-maili – bezpiecznie zmieniamy status od razu w Supabase:
     const { error } = await window.sb
       .from('bookings')
       .update({ status:'Potwierdzona', confirmed_at:new Date().toISOString() })
@@ -173,7 +179,6 @@ async function confirmBooking(booking_no) {
     return { ok:true, fallback:true };
   }
 }
-
 
 
   async function cancelBooking(booking_no) {
@@ -228,14 +233,6 @@ async function confirmBooking(booking_no) {
   }
   return;
 }
-
-
-
-
-          modal.classList.remove('hidden');
-        }
-        return;
-      }
 
       if (action==='confirm') {
         btn.disabled = true;
