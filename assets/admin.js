@@ -350,19 +350,22 @@ for (const b of list) {
         btn.disabled = true;
         try { await confirmBooking(id); await initBookings(); }
         catch(err){ alert('Błąd potwierdzania: ' + (err?.message||err)); }
-        finally { btn.disabled = false; // po udanym potwierdzeniu rezerwacji:
-try {
-  const details = JSON.parse(btn.closest('tr').dataset.details || '{}');
-  upsertClientFromBookingRow({
-    client_name: details.client_name,
-    client_email: details.client_email,
-    phone: details.phone,
-    address: details.address
-  });
-} catch (e) {
-  console.warn('upsert client after confirm:', e);
+        finally {
+  btn.disabled = false;
+  try {
+    const details = JSON.parse(btn.closest('tr').dataset.details || '{}');
+    upsertClientFromBookingRow({
+      client_name: details.client_name,
+      client_email: details.client_email,
+      phone: details.phone,
+      address: details.address
+    });
+    renderClients(); // <—— to dopisz
+  } catch (e) {
+    console.warn('upsert client after confirm:', e);
+  }
 }
-}
+
         return;
       }
 
