@@ -101,7 +101,7 @@ async function syncClientsFromSupabase() {
     }
     if      (name==='bookings') initBookings();
     else if (name==='slots')    loadSlots();
-    else if (name==='clients')  loadClients();
+    else if (name==='clients')  renderClients();
     else if (name==='settings') loadSettings();
   }
   (function wireTabs(){
@@ -679,30 +679,6 @@ function wireClients() {
       loadSlots();
     });
   })();
-
-  // --- CLIENTS (LocalStorage) -----------------------------------------------
-  function loadLocal(){ try { return JSON.parse(localStorage.getItem(LS_CLIENTS_KEY) || '{"clients":[]}'); } catch { return { clients: [] }; } }
-  function saveLocal(db){ localStorage.setItem(LS_CLIENTS_KEY, JSON.stringify(db)); }
-
-  let CURRENT_CLIENT_ID = null;
-
-  function loadClients() {
-    const q = ($('#client-q')?.value || '').trim().toLowerCase();
-    const tbody = $('#clients-rows'); if (!tbody) return;
-    const db = loadLocal();
-    let list = db.clients.slice().sort((a,b)=> (a.name||'').localeCompare(b.name||''));
-    if (q) list = list.filter(c => [c.name,c.email,c.phone].some(v => (v||'').toLowerCase().includes(q)));
-    tbody.innerHTML = '';
-    if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="4">Brak klientów</td></tr>';
-      return;
-    }
-    for (const c of list) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${c.name||'-'}</td><td>${c.email||'-'}</td><td>${c.phone||'-'}</td><td><button class="btn" data-client-open="${c.id}">Otwórz</button></td>`;
-      tbody.appendChild(tr);
-    }
-  }
 
   // (reszta sekcji Klienci i Ustawienia działa analogicznie, jak opisywałem wcześniej)
 
