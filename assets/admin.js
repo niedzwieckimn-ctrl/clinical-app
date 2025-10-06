@@ -22,6 +22,19 @@
   const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
   const fmtWhen = (iso) => { try { return new Date(iso).toLocaleString('pl-PL', { dateStyle:'medium', timeStyle:'short' }); } catch { return iso||''; } };
   const uid = () => (crypto?.randomUUID ? crypto.randomUUID() : 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function toTelHref(phone){
+  const num = String(phone||'').replace(/[^\d+]/g,''); // tylko cyfry i +
+  return num ? `tel:${num}` : '';
+}
+function toMailHref(email, subject='Rezerwacja potwierdzona'){
+  const e = String(email||'').trim();
+  return e ? `mailto:${encodeURIComponent(e)}?subject=${encodeURIComponent(subject)}` : '';
+}
+function toMapsHref(address){
+  const a = String(address||'').trim();
+  return a ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(a)}` : '';
+}
 
   // --- TABS -----------------------------------------------------------------
   function showNav() { const nav = $('#top-tabs'); if (nav) nav.style.display = ''; }
@@ -103,9 +116,13 @@
         <td>${b.client_name || '-'}</td>
         <td>${fmtWhen(b.when)}</td>
         <td>
-          <button class="btn" data-action="confirm" data-id="${b.booking_no}">Potwierdź</button>
-          <button class="btn" data-action="cancel"  data-id="${b.booking_no}">Anuluj</button>
-          <button class="btn" data-action="details" data-id="${b.booking_no}">Szczegóły</button>
+          .btn-confirm { background:#16a34a; color:#fff; border-color:#128a3f; }
+.btn-confirm:hover { filter: brightness(0.95); }
+.btn-cancel  { background:#dc2626; color:#fff; border-color:#b31f1f; }
+.btn-cancel:hover  { filter: brightness(0.95); }
+.btn-details { background:#607d8b; color:#fff; border-color:#546e7a; }
+.btn-details:hover { filter: brightness(0.95); }
+
         </td>`;
       tr.dataset.details = JSON.stringify(b);
       tbody.appendChild(tr);
@@ -129,23 +146,34 @@
   })();
 
   async function confirmBooking(booking_no) {
-    try {
-      const res = await fetch('/.netlify/functions/admin-confirm', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ booking_no })
-      });
-      const out = await res.text();
-      if (!res.ok) throw new Error(out);
-      return JSON.parse(out);
-    } catch (e) {
-      // fallback
-      const { error } = await window.sb.from('bookings')
-        .update({ status:'Potwierdzona', confirmed_at:new Date().toISOString() })
-        .eq('booking_no', booking_no);
-      if (error) throw error; return { ok:true, fallback:true };
+  try {
+    const res = await fetch('/.netlify/functions/admin-confirm', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ booking_no })
+    });
+
+    const text = await res.text();
+    if (!res.ok) {
+      // pokaż co przyszło z funkcji
+      throw new Error(text || `HTTP ${res.status}`);
     }
+    // spróbuj zdekodować JSON
+    let out = {};
+    try { out = JSON.parse(text || '{}'); } catch { /* ignoruj */ }
+    return out;
+  } catch (e) {
+    console.warn('[admin-confirm] problem, używam fallbacku:', e);
+    // Fallback bez e-maili – bezpiecznie zmieniamy status od razu w Supabase:
+    const { error } = await window.sb
+      .from('bookings')
+      .update({ status:'Potwierdzona', confirmed_at:new Date().toISOString() })
+      .eq('booking_no', booking_no);
+    if (error) throw error;
+    return { ok:true, fallback:true };
   }
+}
+
 
   async function cancelBooking(booking_no) {
     try {
@@ -176,13 +204,30 @@
         const modal = $('#details-modal');
         const body = $('#details-body');
         if (modal && body) {
-          body.innerHTML = `
-            <p><b>Nr rezerwacji:</b> ${b.booking_no || ''}</p>
-            <p><b>Imię i nazwisko:</b> ${b.client_name || ''}</p>
-            <p><b>Termin:</b> ${fmtWhen(b.when)}</p>
-            <p><b>Usługa:</b> ${b.service_name || ''}</p>
-            <p><b>Telefon:</b> ${b.phone || ''}</p>
-            <p><b>Uwagi:</b> ${b.notes || '-'}</p>`;
+         const addr   = b.address || b.client_address || '';      // użyj pola, które masz w widoku
+const email  = b.client_email || b.email || '';
+const phone  = b.phone || b.client_phone || '';
+const mapH   = toMapsHref(addr);
+const mailH  = toMailHref(email, 'Rezerwacja potwierdzona');
+const telH   = toTelHref(phone);
+
+body.innerHTML = `
+  <p><b>Nr rezerwacji:</b> ${esc(b.booking_no)}</p>
+  <p><b>Imię i nazwisko:</b> ${esc(b.client_name || '')}</p>
+  <p><b>Termin:</b> ${esc(fmtWhen(b.when))}</p>
+  <p><b>Usługa:</b> ${esc(b.service_name || '')}</p>
+  <p><b>Adres:</b> ${
+    addr ? (mapH ? `<a href="${mapH}" target="_blank" rel="noopener">${esc(addr)}</a>` : esc(addr)) : '-'
+  }</p>
+  <p><b>E-mail:</b> ${
+    email ? (mailH ? `<a href="${mailH}">${esc(email)}</a>` : esc(email)) : '-'
+  }</p>
+  <p><b>Telefon:</b> ${
+    phone ? (telH ? `<a href="${telH}">${esc(phone)}</a>` : esc(phone)) : '-'
+  }</p>
+  <p><b>Uwagi:</b> ${esc(b.notes || '-')}</p>`;
+
+
           modal.classList.remove('hidden');
         }
         return;
@@ -233,7 +278,7 @@
       const dt = new Date(when);
       dt.setSeconds(0,0);
       const m = dt.getMinutes();
-      const rounded = Math.round(m/5)*5;
+      const rounded = Math.round(m/15)*15;
       dt.setMinutes(rounded);
       const { error } = await window.sb.from('slots').insert({ when: dt.toISOString(), taken: false });
       if (error) { alert(error.message); return; }
