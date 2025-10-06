@@ -35,61 +35,108 @@ function toMapsHref(address){
   const a = String(address||'').trim();
   return a ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(a)}` : '';
 }
-// ====== AUTO-IMPORT KLIENTÓW z potwierdzonych rezerwacji (Supabase) ======
+// ===== AUTO-IMPORT KLIENTÓW z potwierdzonych rezerwacji — WERSJA DEBUG =====
+function _first(...vals) {
+  for (const v of vals) {
+    if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+  }
+  return '';
+}
+function _normPhone(p) { return (p||'').replace(/\D+/g,''); }
+function _isConfirmedStatus(s) {
+  const t = String(s||'').toLowerCase();
+  // dowolne warianty + ochrona przed "anul"
+  return (t.includes('potwierdz') || t.includes('confirm')) && !t.includes('anul');
+}
 
-// jednoznaczny klucz klienta: preferuj email, w razie braku użyj telefonu
 function clientKeyFrom(email, phone) {
   const e = (email || '').trim().toLowerCase();
-  const p = (phone || '').replace(/\D+/g,''); // tylko cyfry
+  const p = _normPhone(phone);
   return e ? `mail:${e}` : (p ? `tel:${p}` : null);
 }
 
-// uzupełnij klienta danymi z rezerwacji, nie nadpisuj już wypełnionych pól
-function upsertClientFromBookingRow(b) {
-  const key = clientKeyFrom(b.client_email, b.phone);
-  if (!key) return;
-
+function upsertClientFromNormalizedRow(nr) {
   const list = clientsLoad();
-  // znajdź po email/telefonie
   let c = list.find(x =>
-    (x.email && x.email.toLowerCase() === (b.client_email||'').toLowerCase()) ||
-    (x.phone && x.phone.replace(/\D+/g,'') === (b.phone||'').replace(/\D+/g,''))
+    (x.email && nr.email && x.email.toLowerCase() === nr.email) ||
+    (_normPhone(x.phone) && _normPhone(nr.phone) && _normPhone(x.phone) === _normPhone(nr.phone))
   );
-
   if (!c) { c = clientNew(); list.push(c); }
 
-  // uzupełniaj TYLKO jeśli puste lokalnie
-  if (!c.name && b.client_name) c.name = b.client_name;
-  if (!c.email && b.client_email) c.email = b.client_email.toLowerCase();
-  if (!c.phone && b.phone) c.phone = b.phone;
-  if (!c.address && b.address) c.address = b.address;
+  // uzupełniaj tylko puste pola
+  if (!c.name && nr.name) c.name = nr.name;
+  if (!c.email && nr.email) c.email = nr.email;
+  if (!c.phone && nr.phone) c.phone = nr.phone;
+  if (!c.address && nr.address) c.address = nr.address;
 
-  // nic wrażliwego nie ściągamy z bazy (prefs/allergies/... zostają lokalne)
   clientsSave(list);
 }
 
-// pełna synchronizacja: pobierz WSZYSTKIE potwierdzone i dodaj brakujących
 async function syncClientsFromSupabase() {
-  // bierzemy tylko to, co potrzebne
-  const { data, error } = await window.sb
-    .from('bookings_view')
-    .select('client_name, client_email, phone, address, status')
-    .eq('status','Potwierdzona');
+  console.log('%c[sync] start','color:#0aa');
+  if (!window.sb) { console.error('[sync] brak window.sb'); return; }
 
-  if (error) { console.warn('[clients sync] error:', error.message); return; }
-  const rows = Array.isArray(data) ? data : [];
+  // 1) spróbuj bookings_view
+  let data = null, err1 = null;
+  try {
+    const q1 = await window.sb
+      .from('bookings_view')
+      .select('client_name, client_email, email, phone, client_phone, address, address_line, status');
+    if (q1.error) { err1 = q1.error; }
+    else { data = q1.data || []; }
+  } catch (e) { err1 = e; }
+  if (err1) console.warn('[sync] bookings_view error:', err1.message || err1);
 
-  // deduplikacja po kluczu
-  const seen = new Set();
-  for (const b of rows) {
-    const k = clientKeyFrom(b.client_email, b.phone);
-    if (!k || seen.has(k)) continue;
-    seen.add(k);
-    upsertClientFromBookingRow(b);
+  // 2) fallback: tabela bookings
+  if (!Array.isArray(data)) {
+    try {
+      const q2 = await window.sb
+        .from('bookings')
+        .select('client_name, client_email, email, phone, client_phone, address, address_line, status');
+      if (q2.error) {
+        console.error('[sync] bookings fallback error:', q2.error.message);
+        return;
+      }
+      data = q2.data || [];
+      console.log('[sync] fallback bookings rows:', data.length);
+    } catch (e2) {
+      console.error('[sync] bookings fallback fatal:', e2);
+      return;
+    }
+  } else {
+    console.log('[sync] bookings_view rows:', data.length);
   }
-  // odśwież widok, jeśli jesteś na zakładce Klienci
+
+  // 3) normalizacja + filtr statusu
+  const rows = [];
+  for (const r of data) {
+    const name    = _first(r.client_name, r.name);
+    const email   = _first(r.client_email, r.email).toLowerCase();
+    const phone   = _first(r.client_phone, r.phone);
+    const address = _first(r.address, r.address_line);
+    const status  = r.status;
+    if (!_isConfirmedStatus(status)) continue;
+
+    rows.push({ name, email, phone, address, status });
+  }
+  console.log('[sync] confirmed rows (normalized):', rows.length);
+
+  // 4) deduplikacja i upsert do localStorage
+  const seen = new Set();
+  let imported = 0;
+  for (const row of rows) {
+    const key = clientKeyFrom(row.email, row.phone);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    upsertClientFromNormalizedRow(row);
+    imported++;
+  }
+  console.log('[sync] imported into localStorage:', imported);
+
+  // 5) odśwież tabelę
   if (document.getElementById('clients-rows')) renderClients();
 }
+
 
   // --- TABS -----------------------------------------------------------------
   function showNav() { const nav = $('#top-tabs'); if (nav) nav.style.display = ''; }
@@ -136,6 +183,10 @@ async function syncClientsFromSupabase() {
     btn?.addEventListener('click', enter);
     inp?.addEventListener('keydown', (e) => { if (e.key==='Enter') enter(); });
   }
+// już po utworzeniu window.sb i podpięciu UI:
+wireClients?.();
+renderClients?.();          // pokaż to co jest lokalnie (może być pusto)
+syncClientsFromSupabase();  // dociągnij z bazy i uzupełnij localStorage
 
   // --- BOOKINGS -------------------------------------------------------------
  async function fetchBookings() {
@@ -353,17 +404,18 @@ for (const b of list) {
         finally {
   btn.disabled = false;
   try {
-    const details = JSON.parse(btn.closest('tr').dataset.details || '{}');
-    upsertClientFromBookingRow({
-      client_name: details.client_name,
-      client_email: details.client_email,
-      phone: details.phone,
-      address: details.address
-    });
-    renderClients(); // <—— to dopisz
-  } catch (e) {
-    console.warn('upsert client after confirm:', e);
-  }
+  const details = JSON.parse(btn.closest('tr').dataset.details || '{}');
+  upsertClientFromNormalizedRow({
+    name: _first(details.client_name, details.name),
+    email: _first(details.client_email, details.email)?.toLowerCase(),
+    phone: _first(details.client_phone, details.phone),
+    address: _first(details.address, details.address_line)
+  });
+  renderClients();  // ← to odświeża listę Klientów od razu po potwierdzeniu
+} catch (e) {
+  console.warn('upsert client after confirm:', e);
+}
+
 }
 
         return;
