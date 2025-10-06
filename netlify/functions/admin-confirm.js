@@ -39,34 +39,36 @@ export const handler = async (event) => {
     const whenStr = new Date(booking.when).toLocaleString('pl-PL', { dateStyle: 'full', timeStyle: 'short' });
     const subject = `✅ Rezerwacja potwierdzona – ${booking.service_name || 'wizyta'}`;
     const html = `
-    <p>Dziękujemy za dokonanie rezerwacji w <strong>Massage &amp; SPA</strong>.</p>
+const html = `
+  <p>Dziękujemy za dokonanie rezerwacji w <strong>Massage &amp; SPA</strong>.</p>
 
-<p>
-📅 <strong>Termin:</strong> {{TERMIN}}<br>
-🧘‍♀️ <strong>Usługa:</strong> {{USŁUGA}}<br>
-📍 <strong>Adres:</strong> {{ADRES}}
-</p>
+  <p>
+  📅 <strong>Termin:</strong> ${booking.slot_when}<br>
+  🧘‍♀️ <strong>Usługa:</strong> ${booking.service_name}<br>
+  📍 <strong>Adres:</strong> ${booking.address}
+  </p>
 
-<p>Aby masaż przebiegł komfortowo i sprawnie, prosimy o przygotowanie miejsca według poniższych wskazówek:</p>
+  <p>Aby masaż przebiegł komfortowo i sprawnie, prosimy o przygotowanie miejsca według poniższych wskazówek:</p>
 
-<ul>
-  <li>🛋 <strong>Przygotuj przestrzeń</strong> — najlepiej ok. 2 × 3 m wolnego miejsca, aby można było ustawić stół i swobodnie się poruszać.</li>
-  <li>🪄 <strong>Zadbaj o ciepło</strong> — pomieszczenie powinno być przyjemnie nagrzane (ok. 23–25 °C), aby ciało nie marzło podczas masażu.</li>
-  <li>🌿 <strong>Zapewnij dostęp do gniazdka</strong> — jeśli używamy podgrzewacza lub lampy, przyda się prąd w pobliżu miejsca masażu.</li>
-  <li>🧼 <strong>Prysznic przed masażem</strong> — najlepiej ok. 1–2 godziny wcześniej.</li>
-  <li>🥗 <strong>Nie jedz ciężkich posiłków</strong> tuż przed zabiegiem (odczekaj 1,5–2 godziny).</li>
-  <li>💧 <strong>Wypij szklankę wody</strong> przed wizytą — wspiera to proces regeneracji organizmu.</li>
-  <li>🐾 <strong>Zwierzęta domowe</strong> — jeśli to możliwe, zadbaj, aby podczas masażu nie wchodziły do pokoju.</li>
-</ul>
+  <ul>
+    <li>🛋 <strong>Przygotuj przestrzeń</strong> — najlepiej ok. 2 × 3 m wolnego miejsca, aby można było ustawić stół i swobodnie się poruszać.</li>
+    <li>🪄 <strong>Zadbaj o ciepło</strong> — pomieszczenie powinno być przyjemnie nagrzane (ok. 23–25 °C), aby ciało nie marzło podczas masażu.</li>
+    <li>🌿 <strong>Zapewnij dostęp do gniazdka</strong> — jeśli używamy podgrzewacza lub lampy, przyda się prąd w pobliżu miejsca masażu.</li>
+    <li>🧼 <strong>Prysznic przed masażem</strong> — najlepiej ok. 1–2 godziny wcześniej.</li>
+    <li>🥗 <strong>Nie jedz ciężkich posiłków</strong> tuż przed zabiegiem (odczekaj 1,5–2 godziny).</li>
+    <li>💧 <strong>Wypij szklankę wody</strong> przed wizytą — wspiera to proces regeneracji organizmu.</li>
+    <li>🐾 <strong>Zwierzęta domowe</strong> — jeśli to możliwe, zadbaj, aby podczas masażu nie wchodziły do pokoju.</li>
+  </ul>
 
-<p>
-📞 W razie zmian lub pytań prosimy o kontakt:<br>
-tel. <a href="tel:729979396">729 979 396</a><br>
-e-mail: <a href="mailto:massages.n.spa@gmail.com">massages.n.spa@gmail.com</a>
-</p>
+  <p>
+  📞 W razie zmian lub pytań prosimy o kontakt:<br>
+  tel. <a href="tel:729979396">729 979 396</a><br>
+  e-mail: <a href="mailto:massages.n.spa@gmail.com">massages.n.spa@gmail.com</a>
+  </p>
 
-<p>Do zobaczenia w Twoim domu!<br>
-Zespół <strong>Massage &amp; SPA</strong></p>
+  <p>Do zobaczenia w Twoim domu!<br>
+  Zespół <strong>Massage &amp; SPA</strong></p>
+`;
 
     `;
 
