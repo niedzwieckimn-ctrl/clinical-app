@@ -116,12 +116,10 @@ function toMapsHref(address){
         <td>${b.client_name || '-'}</td>
         <td>${fmtWhen(b.when)}</td>
         <td>
-          .btn-confirm { background:#16a34a; color:#fff; border-color:#128a3f; }
-.btn-confirm:hover { filter: brightness(0.95); }
-.btn-cancel  { background:#dc2626; color:#fff; border-color:#b31f1f; }
-.btn-cancel:hover  { filter: brightness(0.95); }
-.btn-details { background:#607d8b; color:#fff; border-color:#546e7a; }
-.btn-details:hover { filter: brightness(0.95); }
+<button class="btn" data-action="confirm" ...>Potwierdź</button>
+<button class="btn" data-action="cancel"  ...>Anuluj</button>
+<button class="btn" data-action="details" ...>Szczegóły</button>
+
 
         </td>`;
       tr.dataset.details = JSON.stringify(b);
