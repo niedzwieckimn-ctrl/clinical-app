@@ -42,11 +42,7 @@ export const handler = async (event) => {
   <p>Dziękujemy za dokonanie rezerwacji w <strong>Massage &amp; SPA</strong>.</p>
 
   <p>
-  📅 <strong>Termin:</strong> ${new Date(booking.slot_when).toLocaleString('pl-PL', {
-  dateStyle: 'medium',
-  timeStyle: 'short'
-})}<br>
-📅 <strong>Termin:</strong> ${booking.slot_when}<br>
+  📅 <strong>Termin:</strong> ${booking.when}<br>
   🧘‍♀️ <strong>Usługa:</strong> ${booking.service_name}<br>
   📍 <strong>Adres:</strong> ${booking.address}
   </p>
