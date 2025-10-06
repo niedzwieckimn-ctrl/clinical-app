@@ -38,7 +38,7 @@ export const handler = async (event) => {
     // Email – ta sama treść do klienta i masażystki
     const whenStr = new Date(booking.when).toLocaleString('pl-PL', { dateStyle: 'full', timeStyle: 'short' });
     const subject = `✅ Rezerwacja potwierdzona – ${booking.service_name || 'wizyta'}`;
-    const html =  `
+    const html = `
   <p>Dziękujemy za dokonanie rezerwacji w <strong>Massage &amp; SPA</strong>.</p>
 
   <p>
@@ -67,7 +67,8 @@ export const handler = async (event) => {
 
   <p>Do zobaczenia w Twoim domu!<br>
   Zespół <strong>Massage &amp; SPA</strong></p>
-`;
+
+
     `;
 
     const recipients = Array.from(new Set([
