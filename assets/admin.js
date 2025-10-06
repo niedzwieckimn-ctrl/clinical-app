@@ -202,28 +202,30 @@ function toMapsHref(address){
         const modal = $('#details-modal');
         const body = $('#details-body');
         if (modal && body) {
-         const addr   = b.address || b.client_address || '';      // użyj pola, które masz w widoku
-const email  = b.client_email || b.email || '';
-const phone  = b.phone || b.client_phone || '';
-const mapH   = toMapsHref(addr);
-const mailH  = toMailHref(email, 'Rezerwacja potwierdzona');
-const telH   = toTelHref(phone);
+         const addrParts = [
+  b.address,            // jeśli masz kolumnę address
+  b.client_address,     // albo client_address
+  b.place_address,      // albo place_address
+  b.street && b.city ? `${b.street}, ${b.city}` : null // z pól street/city
+].filter(Boolean);
+const addr  = addrParts[0] || '';
+const email = b.client_email || b.email || '';
+const phone = b.phone || b.client_phone || '';
+
+const mapH  = addr ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}` : '';
+const mailH = email ? `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent('Rezerwacja potwierdzona')}` : '';
+const telH  = phone ? `tel:${String(phone).replace(/[^\d+]/g,'')}` : '';
 
 body.innerHTML = `
-  <p><b>Nr rezerwacji:</b> ${esc(b.booking_no)}</p>
-  <p><b>Imię i nazwisko:</b> ${esc(b.client_name || '')}</p>
-  <p><b>Termin:</b> ${esc(fmtWhen(b.when))}</p>
-  <p><b>Usługa:</b> ${esc(b.service_name || '')}</p>
-  <p><b>Adres:</b> ${
-    addr ? (mapH ? `<a href="${mapH}" target="_blank" rel="noopener">${esc(addr)}</a>` : esc(addr)) : '-'
-  }</p>
-  <p><b>E-mail:</b> ${
-    email ? (mailH ? `<a href="${mailH}">${esc(email)}</a>` : esc(email)) : '-'
-  }</p>
-  <p><b>Telefon:</b> ${
-    phone ? (telH ? `<a href="${telH}">${esc(phone)}</a>` : esc(phone)) : '-'
-  }</p>
-  <p><b>Uwagi:</b> ${esc(b.notes || '-')}</p>`;
+  <p><b>Nr rezerwacji:</b> ${b.booking_no || ''}</p>
+  <p><b>Imię i nazwisko:</b> ${b.client_name || ''}</p>
+  <p><b>Termin:</b> ${fmtWhen(b.when)}</p>
+  <p><b>Usługa:</b> ${b.service_name || ''}</p>
+  <p><b>Adres:</b> ${addr ? `<a href="${mapH}" target="_blank" rel="noopener">${addr}</a>` : '-'}</p>
+  <p><b>E-mail:</b> ${email ? `<a href="${mailH}">${email}</a>` : '-'}</p>
+  <p><b>Telefon:</b> ${phone ? `<a href="${telH}">${phone}</a>` : '-'}</p>
+  <p><b>Uwagi:</b> ${b.notes || '-'}</p>`;
+
 
 
           modal.classList.remove('hidden');
