@@ -343,6 +343,249 @@ for (const b of list) {
     tbody.appendChild(tr);
   }
 }
+// =============== KLIENCI ===============
+
+const CLIENTS_LS_KEY = 'clients.v1';
+const CLIENTS_EXPORT_VERSION = 2;
+
+// Model klienta
+function clientNew() {
+  return {
+    id: cryptoRandId(),
+    name: '', email: '', phone: '', address: '',
+    prefs: '', allergies: '', contras: '', notes: '',
+    treatmentNotes: {} // notatki przypięte do booking_no
+  };
+}
+
+// localStorage helpers
+function clientsLoad() {
+  try {
+    const raw = localStorage.getItem(CLIENTS_LS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+function clientsSave(list) {
+  localStorage.setItem(CLIENTS_LS_KEY, JSON.stringify(list || []));
+}
+function cryptoRandId() {
+  const a = new Uint8Array(8); (self.crypto||window.crypto).getRandomValues(a);
+  return Array.from(a).map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+// Filtrowanie listy
+function clientsFilter(term) {
+  term = (term||'').toLowerCase();
+  const list = clientsLoad();
+  if (!term) return list;
+  return list.filter(c =>
+    (c.name||'').toLowerCase().includes(term) ||
+    (c.email||'').toLowerCase().includes(term) ||
+    (c.phone||'').toLowerCase().includes(term)
+  );
+}
+
+// Render listy klientów
+function renderClients() {
+  const tbody = document.getElementById('clients-rows');
+  const term = document.getElementById('client-search')?.value || '';
+  const list = clientsFilter(term);
+  tbody.innerHTML = '';
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="5">Brak klientów</td></tr>`;
+    return;
+  }
+  for (const c of list) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(c.name || '-')}</td>
+      <td>${escapeHtml(c.email || '-')}</td>
+      <td>${escapeHtml(c.phone || '-')}</td>
+      <td>-</td>
+      <td>
+        <button class="btn" data-client-edit="${c.id}">Edytuj</button>
+        <button class="btn btn-cancel" data-client-del="${c.id}">Usuń</button>
+      </td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+// Modal klienta (edycja podstawowych danych)
+let CLIENT_EDIT_ID = null;
+
+function openClientModal(id) {
+  const list = clientsLoad();
+  let c = list.find(x => x.id === id);
+  if (!c) { c = clientNew(); c.id = id || c.id; list.push(c); clientsSave(list); }
+  CLIENT_EDIT_ID = c.id;
+  document.getElementById('client-modal-title').textContent = c.name || 'Nowy klient';
+  document.getElementById('c-name').value = c.name;
+  document.getElementById('c-email').value = c.email;
+  document.getElementById('c-phone').value = c.phone;
+  document.getElementById('c-address').value = c.address;
+  document.getElementById('c-prefs').value = c.prefs;
+  document.getElementById('c-allergies').value = c.allergies;
+  document.getElementById('c-contras').value = c.contras;
+  document.getElementById('c-notes').value = c.notes;
+  document.getElementById('client-modal').classList.remove('hidden');
+}
+function closeClientModal() {
+  document.getElementById('client-modal').classList.add('hidden');
+  CLIENT_EDIT_ID = null;
+}
+function readClientForm() {
+  return {
+    id: CLIENT_EDIT_ID,
+    name: document.getElementById('c-name').value.trim(),
+    email: document.getElementById('c-email').value.trim(),
+    phone: document.getElementById('c-phone').value.trim(),
+    address: document.getElementById('c-address').value.trim(),
+    prefs: document.getElementById('c-prefs').value.trim(),
+    allergies: document.getElementById('c-allergies').value.trim(),
+    contras: document.getElementById('c-contras').value.trim(),
+    notes: document.getElementById('c-notes').value.trim(),
+    treatmentNotes: clientsLoad().find(x=>x.id===CLIENT_EDIT_ID)?.treatmentNotes || {}
+  };
+}
+
+// Historia z Supabase
+async function fetchHistoryFromSupabase({ email, phone }) {
+  let q = window.sb.from('bookings_view')
+    .select('booking_no, when, service_name, status')
+    .eq('status','Potwierdzona')
+    .order('when', { ascending: false });
+
+  if (email) q = q.eq('client_email', email.toLowerCase());
+  else if (phone) q = q.eq('phone', phone);
+  else return [];
+
+  const { data, error } = await q;
+  if (error) { console.warn('history error', error); return []; }
+  return data || [];
+}
+
+// Modal HISTORIA
+let HISTORY_CURRENT_ID = null;
+
+async function openHistoryModal(clientId) {
+  const list = clientsLoad();
+  const c = list.find(x => x.id === clientId);
+  if (!c) return;
+  HISTORY_CURRENT_ID = c.id;
+  document.getElementById('history-client-name').textContent = c.name || '(bez nazwy)';
+
+  const rows = await fetchHistoryFromSupabase({ email: c.email, phone: c.phone });
+  const tbody = document.getElementById('history-rows'); tbody.innerHTML = '';
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="4">Brak potwierdzonych zabiegów</td></tr>';
+  } else {
+    for (const it of rows) {
+      const localNote = (c.treatmentNotes||{})[it.booking_no] || '';
+      const tr = document.createElement('tr');
+      tr.dataset.bookingNo = it.booking_no;
+      tr.innerHTML = `
+        <td>${fmtDatePL(it.when)}</td>
+        <td>${escapeHtml(it.service_name || '-')}</td>
+        <td><textarea class="treat-note" rows="2">${escapeHtml(localNote)}</textarea></td>
+        <td><button class="btn" data-hist-save="${it.booking_no}">Zapisz</button></td>`;
+      tbody.appendChild(tr);
+    }
+  }
+
+  document.getElementById('history-modal').classList.remove('hidden');
+}
+function closeHistoryModal() {
+  document.getElementById('history-modal').classList.add('hidden');
+  HISTORY_CURRENT_ID = null;
+}
+
+// Sugestie
+function openSuggestionsModal(clientId) {
+  const c = clientsLoad().find(x => x.id === clientId);
+  if (!c) return;
+  document.getElementById('suggestions-body').innerHTML = buildSuggestions(c);
+  document.getElementById('suggestions-modal').classList.remove('hidden');
+}
+function closeSuggestionsModal() {
+  document.getElementById('suggestions-modal').classList.add('hidden');
+}
+
+// Sugestie terapeutyczne
+function buildSuggestions(c) {
+  const out = [];
+  const txt = (s)=>String(s||'').toLowerCase();
+  if (txt(c.allergies).includes('olej')) out.push('Unikaj olejków zapachowych.');
+  if (txt(c.prefs).includes('mocny')) out.push('Lubi mocny masaż.');
+  if (Object.keys(c.treatmentNotes||{}).length > 3) out.push('Klient regularny – zaproponuj pakiet.');
+  if (!out.length) out.push('Brak szczególnych zaleceń.');
+  return out.join('<br>');
+}
+
+// Historia - zapis lokalnej notatki
+function wireHistoryModalHandlers() {
+  document.getElementById('history-rows')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-hist-save]');
+    if (!btn || !HISTORY_CURRENT_ID) return;
+    const bookingNo = btn.dataset.histSave;
+    const tr = btn.closest('tr');
+    const val = tr.querySelector('.treat-note')?.value || '';
+    const list = clientsLoad();
+    const c = list.find(x => x.id === HISTORY_CURRENT_ID);
+    c.treatmentNotes[bookingNo] = val;
+    clientsSave(list);
+    alert('Zapisano notatkę lokalną.');
+  });
+  document.getElementById('history-close')?.addEventListener('click', closeHistoryModal);
+}
+
+// Wire wszystko
+function wireClients() {
+  document.getElementById('client-search')?.addEventListener('input', renderClients);
+  document.getElementById('client-add')?.addEventListener('click', () => {
+    const c = clientNew();
+    const list = clientsLoad(); list.push(c); clientsSave(list);
+    openClientModal(c.id);
+  });
+
+  document.getElementById('clients-rows')?.addEventListener('click', (e) => {
+    const edit = e.target.closest('[data-client-edit]');
+    const del  = e.target.closest('[data-client-del]');
+    if (edit) openClientModal(edit.dataset.clientEdit);
+    if (del) {
+      if (!confirm('Usunąć klienta?')) return;
+      const list = clientsLoad().filter(x=>x.id!==del.dataset.clientDel);
+      clientsSave(list); renderClients();
+    }
+  });
+
+  document.getElementById('client-close')?.addEventListener('click', closeClientModal);
+  document.getElementById('client-save')?.addEventListener('click', () => {
+    const updated = readClientForm();
+    const list = clientsLoad();
+    const idx = list.findIndex(x=>x.id===updated.id);
+    if (idx>=0) list[idx] = updated; else list.push(updated);
+    clientsSave(list);
+    renderClients();
+    closeClientModal();
+  });
+  document.getElementById('client-delete')?.addEventListener('click', () => {
+    if (!CLIENT_EDIT_ID) return;
+    if (!confirm('Usunąć klienta?')) return;
+    const list = clientsLoad().filter(x=>x.id!==CLIENT_EDIT_ID);
+    clientsSave(list); renderClients(); closeClientModal();
+  });
+
+  document.getElementById('btn-history-modal')?.addEventListener('click', () => {
+    if (CLIENT_EDIT_ID) openHistoryModal(CLIENT_EDIT_ID);
+  });
+  document.getElementById('btn-suggestions-modal')?.addEventListener('click', () => {
+    if (CLIENT_EDIT_ID) openSuggestionsModal(CLIENT_EDIT_ID);
+  });
+  document.getElementById('suggestions-close')?.addEventListener('click', closeSuggestionsModal);
+
+  wireHistoryModalHandlers();
+}
 
 
   (function wireSlots(){
@@ -399,6 +642,8 @@ for (const b of list) {
   // --- START ----------------------------------------------------------------
   document.addEventListener('DOMContentLoaded', () => {
     wireLogin();
+	wireClients();
+
   });
 
 })();

@@ -142,11 +142,34 @@
       </table>
     </section>
 
-    <!-- KLIENCI -->
-    <section id="clients-screen" class="hidden card stack">
-      <h2>Klienci</h2>
-      <!-- ... zawartość karty klienta, pola, zabiegi, eksport/import ... -->
-    </section>
+<!-- ============== KLIENCI ============== -->
+<section id="clients-screen" class="hidden card stack">
+  <h2>Klienci</h2>
+
+  <!-- Pasek narzędzi -->
+  <div class="row" style="gap:.5rem;flex-wrap:wrap">
+    <input id="client-search" type="search" placeholder="Szukaj: imię, e-mail, tel." />
+    <button id="client-add" class="btn">Dodaj klienta</button>
+    <button id="client-export" class="btn">Eksportuj (.enc)</button>
+    <label class="btn" for="client-import-file" style="cursor:pointer;">Importuj (.enc)</label>
+    <input id="client-import-file" type="file" accept=".enc" style="display:none" />
+  </div>
+
+  <!-- Lista klientów -->
+  <table class="bookings-table">
+    <thead>
+      <tr>
+        <th>Imię i nazwisko</th>
+        <th>E-mail</th>
+        <th>Telefon</th>
+        <th>Ostatni zabieg</th>
+        <th>Akcje</th>
+      </tr>
+    </thead>
+    <tbody id="clients-rows"></tbody>
+  </table>
+</section>
+
 
     <!-- USTAWIENIA -->
     <section id="settings-screen" class="hidden card stack">
@@ -172,5 +195,64 @@
   </div>
 
   <script src="assets/admin.js"></script>
+<!-- Modal edycji klienta -->
+<div id="client-modal" class="modal hidden">
+  <div class="modal-content">
+    <button id="client-close" class="modal-close">×</button>
+    <h3 id="client-modal-title">Klient</h3>
+
+    <div class="stack">
+      <label>Imię i nazwisko <input id="c-name" type="text"></label>
+      <label>E-mail <input id="c-email" type="email"></label>
+      <label>Telefon <input id="c-phone" type="tel"></label>
+      <label>Adres (opcjonalnie) <input id="c-address" type="text"></label>
+      <label>Preferencje <textarea id="c-prefs" rows="2"></textarea></label>
+      <label>Uczulenia <textarea id="c-allergies" rows="2"></textarea></label>
+      <label>Przeciwwskazania <textarea id="c-contras" rows="2"></textarea></label>
+      <label>Notatki ogólne <textarea id="c-notes" rows="3"></textarea></label>
+    </div>
+
+    <div class="row" style="justify-content:flex-start;gap:.5rem;margin-top:.5rem">
+      <button id="btn-history-modal" class="btn">Historia zabiegów</button>
+      <button id="btn-suggestions-modal" class="btn">Sugestie terapeutyczne</button>
+    </div>
+
+    <div class="row" style="justify-content:flex-end;gap:.5rem;margin-top:1rem">
+      <button id="client-delete" class="btn btn-cancel">Usuń klienta</button>
+      <button id="client-save" class="btn btn-confirm">Zapisz</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal HISTORIA -->
+<div id="history-modal" class="modal hidden">
+  <div class="modal-content" style="max-width:800px">
+    <button id="history-close" class="modal-close">×</button>
+    <h3>Historia zabiegów</h3>
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
+      <span id="history-client-name"></span>
+    </div>
+    <table class="bookings-table">
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Usługa</th>
+          <th>Notatka (lokalna)</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="history-rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal SUGESTIE -->
+<div id="suggestions-modal" class="modal hidden">
+  <div class="modal-content" style="max-width:600px">
+    <button id="suggestions-close" class="modal-close">×</button>
+    <h3>Sugestie terapeutyczne</h3>
+    <div id="suggestions-body" class="stack" style="padding:.75rem;background:#f7fafc;min-height:120px"></div>
+  </div>
+</div>
 </body>
 </html>
