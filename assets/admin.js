@@ -35,108 +35,6 @@ function toMapsHref(address){
   const a = String(address||'').trim();
   return a ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(a)}` : '';
 }
-// ===== AUTO-IMPORT KLIENTÓW z potwierdzonych rezerwacji — WERSJA DEBUG =====
-function _first(...vals) {
-  for (const v of vals) {
-    if (v !== undefined && v !== null && String(v).trim() !== '') return v;
-  }
-  return '';
-}
-function _normPhone(p) { return (p||'').replace(/\D+/g,''); }
-function _isConfirmedStatus(s) {
-  const t = String(s||'').toLowerCase();
-  // dowolne warianty + ochrona przed "anul"
-  return (t.includes('potwierdz') || t.includes('confirm')) && !t.includes('anul');
-}
-
-function clientKeyFrom(email, phone) {
-  const e = (email || '').trim().toLowerCase();
-  const p = _normPhone(phone);
-  return e ? `mail:${e}` : (p ? `tel:${p}` : null);
-}
-
-function upsertClientFromNormalizedRow(nr) {
-  const list = clientsLoad();
-  let c = list.find(x =>
-    (x.email && nr.email && x.email.toLowerCase() === nr.email) ||
-    (_normPhone(x.phone) && _normPhone(nr.phone) && _normPhone(x.phone) === _normPhone(nr.phone))
-  );
-  if (!c) { c = clientNew(); list.push(c); }
-
-  // uzupełniaj tylko puste pola
-  if (!c.name && nr.name) c.name = nr.name;
-  if (!c.email && nr.email) c.email = nr.email;
-  if (!c.phone && nr.phone) c.phone = nr.phone;
-  if (!c.address && nr.address) c.address = nr.address;
-
-  clientsSave(list);
-}
-
-async function syncClientsFromSupabase() {
-  console.log('%c[sync] start','color:#0aa');
-  if (!window.sb) { console.error('[sync] brak window.sb'); return; }
-
-  // 1) spróbuj bookings_view
-  let data = null, err1 = null;
-  try {
-    const q1 = await window.sb
-      .from('bookings_view')
-      .select('client_name, client_email, email, phone, client_phone, address, address_line, status');
-    if (q1.error) { err1 = q1.error; }
-    else { data = q1.data || []; }
-  } catch (e) { err1 = e; }
-  if (err1) console.warn('[sync] bookings_view error:', err1.message || err1);
-
-  // 2) fallback: tabela bookings
-  if (!Array.isArray(data)) {
-    try {
-      const q2 = await window.sb
-        .from('bookings')
-        .select('client_name, client_email, email, phone, client_phone, address, address_line, status');
-      if (q2.error) {
-        console.error('[sync] bookings fallback error:', q2.error.message);
-        return;
-      }
-      data = q2.data || [];
-      console.log('[sync] fallback bookings rows:', data.length);
-    } catch (e2) {
-      console.error('[sync] bookings fallback fatal:', e2);
-      return;
-    }
-  } else {
-    console.log('[sync] bookings_view rows:', data.length);
-  }
-
-  // 3) normalizacja + filtr statusu
-  const rows = [];
-  for (const r of data) {
-    const name    = _first(r.client_name, r.name);
-    const email   = _first(r.client_email, r.email).toLowerCase();
-    const phone   = _first(r.client_phone, r.phone);
-    const address = _first(r.address, r.address_line);
-    const status  = r.status;
-    if (!_isConfirmedStatus(status)) continue;
-
-    rows.push({ name, email, phone, address, status });
-  }
-  console.log('[sync] confirmed rows (normalized):', rows.length);
-
-  // 4) deduplikacja i upsert do localStorage
-  const seen = new Set();
-  let imported = 0;
-  for (const row of rows) {
-    const key = clientKeyFrom(row.email, row.phone);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    upsertClientFromNormalizedRow(row);
-    imported++;
-  }
-  console.log('[sync] imported into localStorage:', imported);
-
-  // 5) odśwież tabelę
-  if (document.getElementById('clients-rows')) renderClients();
-}
-
 
   // --- TABS -----------------------------------------------------------------
   function showNav() { const nav = $('#top-tabs'); if (nav) nav.style.display = ''; }
@@ -148,7 +46,7 @@ async function syncClientsFromSupabase() {
     }
     if      (name==='bookings') initBookings();
     else if (name==='slots')    loadSlots();
-    else if (name==='clients')  renderClients();
+    else if (name==='clients')  loadClients();
     else if (name==='settings') loadSettings();
   }
   (function wireTabs(){
@@ -183,10 +81,6 @@ async function syncClientsFromSupabase() {
     btn?.addEventListener('click', enter);
     inp?.addEventListener('keydown', (e) => { if (e.key==='Enter') enter(); });
   }
-// już po utworzeniu window.sb i podpięciu UI:
-wireClients?.();
-renderClients?.();          // pokaż to co jest lokalnie (może być pusto)
-syncClientsFromSupabase();  // dociągnij z bazy i uzupełnij localStorage
 
   // --- BOOKINGS -------------------------------------------------------------
  async function fetchBookings() {
@@ -401,23 +295,7 @@ for (const b of list) {
         btn.disabled = true;
         try { await confirmBooking(id); await initBookings(); }
         catch(err){ alert('Błąd potwierdzania: ' + (err?.message||err)); }
-        finally {
-  btn.disabled = false;
-  try {
-  const details = JSON.parse(btn.closest('tr').dataset.details || '{}');
-  upsertClientFromNormalizedRow({
-    name: _first(details.client_name, details.name),
-    email: _first(details.client_email, details.email)?.toLowerCase(),
-    phone: _first(details.client_phone, details.phone),
-    address: _first(details.address, details.address_line)
-  });
-  renderClients();  // ← to odświeża listę Klientów od razu po potwierdzeniu
-} catch (e) {
-  console.warn('upsert client after confirm:', e);
-}
-
-}
-
+        finally { btn.disabled = false; }
         return;
       }
 
@@ -735,17 +613,36 @@ function wireClients() {
     });
   })();
 
+  // --- CLIENTS (LocalStorage) -----------------------------------------------
+  function loadLocal(){ try { return JSON.parse(localStorage.getItem(LS_CLIENTS_KEY) || '{"clients":[]}'); } catch { return { clients: [] }; } }
+  function saveLocal(db){ localStorage.setItem(LS_CLIENTS_KEY, JSON.stringify(db)); }
+
+  let CURRENT_CLIENT_ID = null;
+
+  function loadClients() {
+    const q = ($('#client-q')?.value || '').trim().toLowerCase();
+    const tbody = $('#clients-rows'); if (!tbody) return;
+    const db = loadLocal();
+    let list = db.clients.slice().sort((a,b)=> (a.name||'').localeCompare(b.name||''));
+    if (q) list = list.filter(c => [c.name,c.email,c.phone].some(v => (v||'').toLowerCase().includes(q)));
+    tbody.innerHTML = '';
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="4">Brak klientów</td></tr>';
+      return;
+    }
+    for (const c of list) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${c.name||'-'}</td><td>${c.email||'-'}</td><td>${c.phone||'-'}</td><td><button class="btn" data-client-open="${c.id}">Otwórz</button></td>`;
+      tbody.appendChild(tr);
+    }
+  }
+
   // (reszta sekcji Klienci i Ustawienia działa analogicznie, jak opisywałem wcześniej)
 
   // --- START ----------------------------------------------------------------
   document.addEventListener('DOMContentLoaded', () => {
     wireLogin();
-	// po zainicjowaniu supabase i UI:
-wireClients();
-
-// na starcie: dociągnij potwierdzonych i wpisz brakujących klientów do localStorage
-syncClientsFromSupabase();
-
+	wireClients();
 
   });
 
