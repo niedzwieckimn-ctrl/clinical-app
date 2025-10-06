@@ -254,6 +254,7 @@ for (const b of list) {
   return { ok: true, fallback: true };
 }
 
+  }
 
   (function wireGlobalActions(){
     document.addEventListener('click', async (e) => {
