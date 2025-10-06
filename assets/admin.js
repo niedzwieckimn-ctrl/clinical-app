@@ -35,6 +35,61 @@ function toMapsHref(address){
   const a = String(address||'').trim();
   return a ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(a)}` : '';
 }
+// ====== AUTO-IMPORT KLIENTÓW z potwierdzonych rezerwacji (Supabase) ======
+
+// jednoznaczny klucz klienta: preferuj email, w razie braku użyj telefonu
+function clientKeyFrom(email, phone) {
+  const e = (email || '').trim().toLowerCase();
+  const p = (phone || '').replace(/\D+/g,''); // tylko cyfry
+  return e ? `mail:${e}` : (p ? `tel:${p}` : null);
+}
+
+// uzupełnij klienta danymi z rezerwacji, nie nadpisuj już wypełnionych pól
+function upsertClientFromBookingRow(b) {
+  const key = clientKeyFrom(b.client_email, b.phone);
+  if (!key) return;
+
+  const list = clientsLoad();
+  // znajdź po email/telefonie
+  let c = list.find(x =>
+    (x.email && x.email.toLowerCase() === (b.client_email||'').toLowerCase()) ||
+    (x.phone && x.phone.replace(/\D+/g,'') === (b.phone||'').replace(/\D+/g,''))
+  );
+
+  if (!c) { c = clientNew(); list.push(c); }
+
+  // uzupełniaj TYLKO jeśli puste lokalnie
+  if (!c.name && b.client_name) c.name = b.client_name;
+  if (!c.email && b.client_email) c.email = b.client_email.toLowerCase();
+  if (!c.phone && b.phone) c.phone = b.phone;
+  if (!c.address && b.address) c.address = b.address;
+
+  // nic wrażliwego nie ściągamy z bazy (prefs/allergies/... zostają lokalne)
+  clientsSave(list);
+}
+
+// pełna synchronizacja: pobierz WSZYSTKIE potwierdzone i dodaj brakujących
+async function syncClientsFromSupabase() {
+  // bierzemy tylko to, co potrzebne
+  const { data, error } = await window.sb
+    .from('bookings_view')
+    .select('client_name, client_email, phone, address, status')
+    .eq('status','Potwierdzona');
+
+  if (error) { console.warn('[clients sync] error:', error.message); return; }
+  const rows = Array.isArray(data) ? data : [];
+
+  // deduplikacja po kluczu
+  const seen = new Set();
+  for (const b of rows) {
+    const k = clientKeyFrom(b.client_email, b.phone);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    upsertClientFromBookingRow(b);
+  }
+  // odśwież widok, jeśli jesteś na zakładce Klienci
+  if (document.getElementById('clients-rows')) renderClients();
+}
 
   // --- TABS -----------------------------------------------------------------
   function showNav() { const nav = $('#top-tabs'); if (nav) nav.style.display = ''; }
@@ -295,7 +350,19 @@ for (const b of list) {
         btn.disabled = true;
         try { await confirmBooking(id); await initBookings(); }
         catch(err){ alert('Błąd potwierdzania: ' + (err?.message||err)); }
-        finally { btn.disabled = false; }
+        finally { btn.disabled = false; // po udanym potwierdzeniu rezerwacji:
+try {
+  const details = JSON.parse(btn.closest('tr').dataset.details || '{}');
+  upsertClientFromBookingRow({
+    client_name: details.client_name,
+    client_email: details.client_email,
+    phone: details.phone,
+    address: details.address
+  });
+} catch (e) {
+  console.warn('upsert client after confirm:', e);
+}
+}
         return;
       }
 
@@ -642,7 +709,12 @@ function wireClients() {
   // --- START ----------------------------------------------------------------
   document.addEventListener('DOMContentLoaded', () => {
     wireLogin();
-	wireClients();
+	// po zainicjowaniu supabase i UI:
+wireClients();
+
+// na starcie: dociągnij potwierdzonych i wpisz brakujących klientów do localStorage
+syncClientsFromSupabase();
+
 
   });
 
