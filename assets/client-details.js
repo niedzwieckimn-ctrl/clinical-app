@@ -308,13 +308,96 @@ async function renderSuggestions(){
   const out = await fetchClientBookings({ email: client.email, phone: client.phone });
   const stats = analyzeHistory(out.rows || []);
   const next  = stats.upcoming[0] || null;
-  const plan = buildPlanList(client, stats, next, out.rows || []);
+const planTextHTML = buildPlanNarrative(client, stats, next, out.rows || []);
+
 
   const narrative = buildNarrativeHTML(client, stats, out.rows || []);
+// === PLAN JAKO NARRACJA (ciągły tekst) ===
+function buildPlanNarrative(client, stats, next, rows){
+  const whenTxt = next ? fmtDatePL(next.when) : '—';
+  const service = next?.service_name || '-';
+
+  // zebrany tekst + kontekst
+  const allNotes = gatherAllNotes(rows, next, client).toLowerCase();
+  const ctx = extractContextFromNotes(allNotes);
+
+  // preferencje / bezpieczeństwo / „smaczki” z uwag
+  const likesHeat  = has(client.prefs, 'ciepł','gorąc') || /(ciepł|gorąc)/.test(allNotes);
+  const prefStrong = has(client.prefs, 'mocn','głęb')    || /(mocn|głęb)/.test(allNotes);
+  const avoidCoco  = has(client.allergies, 'kokos')      || /\bkokos\b/.test(allNotes);
+  const lessChoco  = /(mniej .*czekolad|mniej arom)/.test(allNotes);
+  const warmerOil  = /(cieplejszy olejek|olejek cieplejszy|bardziej ciepły)/.test(allNotes);
+  const longTowel  = /(dłuższy ręcznik|dluzszy recznik)/.test(allNotes);
+
+  // obszary pracy wywnioskowane z notatek/kontekstu
+  const shoulder = /(bark|barki|łopatk|obręcz)/.test(allNotes) || ctx.work === 'manual';
+  const lumbar   = /(lędźw|lędz|dyskop|rwa)/.test(allNotes) || has(client.contras,'lędźw','kręgosł');
+  const forearm  = /(przedrami|nadgarst|łokieć)/.test(allNotes) || ctx.work === 'manual';
+
+  // akapity
+  const parts = [];
+
+  // wprowadzenie / przygotowanie
+  const prep = [];
+  if (likesHeat) prep.push('przygotuj cieplejsze stanowisko i podgrzane medium');
+  if (avoidCoco) prep.push('użyj oleju bez kokosa');
+  if (lessChoco) prep.push('zapach czekolady trzymaj na minimalnym poziomie');
+  if (warmerOil) prep.push('przed startem potwierdź komfort temperatury olejku');
+  if (longTowel) prep.push('przygotuj dłuższy ręcznik do okrycia');
+  if (ctx.pets)  prep.push('poproś, by zwierzęta były w innym pomieszczeniu');
+  parts.push(
+    `Zabieg ${escapeHtml(service)} w dniu ${escapeHtml(whenTxt)} rozpocznij od spokojnego wprowadzenia: `
+    + (prep.length ? prep.join(', ') + '. ' : '')
+    + `W tle włącz muzykę relaksacyjną. Rozgrzej tkanki długimi, płynnymi przesunięciami i płynnie przejdź do pracy właściwej.`
+  );
+
+  // część główna – barki/piersiowy
+  if (shoulder || SG_DETAILED){
+    const more = SG_DETAILED ? ' (30–60 sekund na punkt, 2–3 powtórzenia)' : '';
+    parts.push(
+      `W części głównej połóż akcent na obręcz barkową: rozpracuj punkty spustowe górnego czworobocznego i dźwigacza łopatki${more}, `
+      + `a następnie wykonaj mobilizacje łopatki — ślizgi scapulothoracic z delikatną depresją i rotacją w odciążeniu. `
+      + `Grzbiet piersiowy opracuj powolnym przesuwem przedramienia wzdłuż pasm przykręgosłupowych, utrzymując tempo wolne do umiarkowanego.`
+    );
+  }
+
+  // odcinek lędźwiowy – ostrożność
+  if (lumbar){
+    parts.push(
+      `W odcinku lędźwiowym pracuj wyłącznie powierzchownie z uwagi na wcześniejsze dolegliwości — `
+      + `bez długich ucisków izometrycznych i bez pracy na wyrostkach kolczystych. `
+      + (SG_DETAILED ? `Na mięśniu czworobocznym lędźwi wykonaj krótkie uciski statyczne połączone z wydłużeniem w wydechu.` : '')
+    );
+  }
+
+  // przedramiona / nadgarstki
+  if (forearm){
+    parts.push(
+      `Jeśli wyczuwasz przeciążenia od pracy rąk, wpleć moduł na przedramiona i nadgarstki — `
+      + `striping oraz poprzeczne frikcje zginaczy, a następnie łagodne trakcje i ślizgi promieniowo-łokciowe o małej amplitudzie.`
+    );
+  }
+
+  // sterowanie naciskiem + komunikacja
+  const comms = [];
+  if (prefStrong) comms.push('możesz stopniowo zwiększać nacisk, regularnie sprawdzając komfort');
+  comms.push('utrzymuj płynny rytm i na koniec wróć do długich głaskań i wyciszenia');
+  parts.push(comms.join(', ') + '.');
+
+  // after-care / planowanie
+  const after = [];
+  after.push('zachęć do nawodnienia');
+  after.push('pokaż dwie proste praktyki: mobilizacja barków (łopatki) i spokojny oddech z wydłużonym wydechem');
+  if (stats?.avgInterval) after.push(`zaproponuj rytm wizyt co ${stats.avgInterval <= 21 ? '2–3' : '3–4'} tygodnie`);
+  parts.push('Po zabiegu ' + after.join(', ') + '.');
+
+  // scal na HTML
+  return parts.map(p => `<p>${escapeHtml(p)}</p>`).join('\n');
+}
 
   const nextHdr = next ? `${fmtDatePL(next.when)} • ${escapeHtml(next.service_name||'-')}` : 'brak zaplanowanego zabiegu';
 
- box.innerHTML = `
+box.innerHTML = `
   <div class="card" style="margin-bottom:12px">
     <div style="display:flex; gap:12px; align-items:center; justify-content:space-between">
       <h3 style="margin:6px 0">Sugestie terapeutyczne – najbliższa wizyta (${nextHdr})</h3>
@@ -322,14 +405,19 @@ async function renderSuggestions(){
         <input type="checkbox" id="sg-detailed" ${SG_DETAILED?'checked':''}/> Szczegółowy
       </label>
     </div>
-    ${plan.length ? `<ul style="margin:6px 0 10px 18px">${plan.map(it=>`<li>${it}</li>`).join('')}</ul>` : '<p>Brak szczególnych zaleceń.</p>'}
-    <button id="sg-save-plan" class="btn">Zapisz plan do Notatek</button>
+    <div id="sg-plan" style="line-height:1.6">${planTextHTML}</div>
+    <div style="margin-top:8px">
+      <button id="sg-save-plan" class="btn">Zapisz plan do Notatek</button>
+      <button id="sg-copy-plan" class="btn">Kopiuj plan</button>
+    </div>
   </div>
+
   <div class="card">
     <h3 style="margin:6px 0">Narracja kliniczna (podsumowanie klienta)</h3>
     <div id="sg-narrative" style="line-height:1.5">${narrative}</div>
     <div style="margin-top:8px">
       <button id="sg-save-narr" class="btn">Zapisz narrację do Notatek</button>
+      <button id="sg-copy-narr" class="btn">Kopiuj narrację</button>
     </div>
   </div>
 `;
@@ -357,6 +445,16 @@ document.getElementById('sg-detailed')?.addEventListener('change', async (e)=>{
     saveBlock('Narracja kliniczna', safe);
   });
 }
+document.getElementById('sg-save-plan')?.addEventListener('click', () => {
+  const raw = document.getElementById('sg-plan')?.innerText || '';
+  const safe = raw.split('\n').map(x => x.trim()).filter(Boolean).join('\n');
+  saveBlock('Plan terapeutyczny (narracja)', safe);
+});
+document.getElementById('sg-copy-plan')?.addEventListener('click', ()=>{
+  const raw = document.getElementById('sg-plan')?.innerText || '';
+  navigator.clipboard?.writeText(raw).then(()=>alert('Skopiowano do schowka'))
+    .catch(()=>alert('Nie udało się skopiować.'));
+});
 
   // Normalizacja identyfikatorów
   function normEmail(e){ return String(e||'').trim().toLowerCase(); }
