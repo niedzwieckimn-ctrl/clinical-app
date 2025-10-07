@@ -133,7 +133,7 @@
    </tr>
  `).join('');
 
-
+  }
   async function renderHistory(){
     const out = await fetchHistory({ email: client.email, phone: client.phone });
     const tbody = document.getElementById('cd-history-rows'); if (!tbody) return;
