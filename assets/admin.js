@@ -613,6 +613,10 @@ function wireClients() {
     });
   })();
 
-  // --- CLIENTS (LocalStorage) -----------------------------------------------
-  
+  // --- INIT ---
+document.addEventListener('DOMContentLoaded', () => {
+  wireLogin();
+  wireClients();
+});
+
 /* removed legacy {fname} */
