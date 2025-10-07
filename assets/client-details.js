@@ -22,6 +22,8 @@
       .forEach(x => document.getElementById(x)?.classList.add('hidden'));
     document.getElementById(id)?.classList.remove('hidden');
   }
+function normEmail(e){ return String(e||'').trim().toLowerCase(); }
+function normPhone(p){ return String(p||'').replace(/[^\d+]/g,''); }
 
   // ---- DATA ----
   const id = qs.get('id');
@@ -51,35 +53,60 @@
   showSection('cd-section-suggestions');
 
   // Nadchodzące / Historia (Supabase)
-  async function fetchUpcoming({ email, phone }){
-    const nowIso = new Date().toISOString();
-    let q = window.sb.from('bookings_view')
-      .select('when, service_name, status')
-      .neq('status','Anulowana')
-      .gte('when', nowIso)
-      .order('when', { ascending: true });
-    if (email) q = q.eq('client_email', String(email).toLowerCase());
-    else if (phone) q = q.eq('phone', phone);
-    else return [];
-    const { data, error } = await q;
-    if (error) { console.warn('upcoming error', error); return []; }
-    return data || [];
+async function fetchUpcoming({ email, phone }){
+  const nowIso = new Date().toISOString();
+  const e = normEmail(email);
+  const p = normPhone(phone);
+
+  let q = window.sb.from('bookings_view')
+    .select('when, service_name, status')
+    .gte('when', nowIso)
+    .neq('status','Anulowana')
+    .order('when', { ascending: true });
+
+  if (e && p) {
+    // dopasuj po e-mail (case-insensitive) LUB po telefonie
+    q = q.or(`client_email.ilike.${e},phone.eq.${p}`);
+  } else if (e) {
+    q = q.ilike('client_email', e);
+  } else if (p) {
+    q = q.eq('phone', p);
+  } else {
+    return []; // brak identyfikatorów – nic nie zwrócimy
   }
 
+  const { data, error } = await q;
+  if (error) { console.warn('upcoming error', error); return []; }
+  return data || [];
+}
+
+
   async function fetchHistory({ email, phone }){
-    const nowIso = new Date().toISOString();
-    let q = window.sb.from('bookings_view')
-      .select('when, service_name, status')
-      .eq('status','Potwierdzona')
-      .lt('when', nowIso)
-      .order('when', { ascending: false });
-    if (email) q = q.eq('client_email', String(email).toLowerCase());
-    else if (phone) q = q.eq('phone', phone);
-    else return [];
-    const { data, error } = await q;
-    if (error) { console.warn('history error', error); return []; }
-    return data || [];
+  const nowIso = new Date().toISOString();
+  const e = normEmail(email);
+  const p = normPhone(phone);
+
+  let q = window.sb.from('bookings_view')
+    .select('when, service_name, status')
+    .lt('when', nowIso)                 // tylko przeszłe
+    .neq('status','Anulowana')          // nie pokazuj anulowanych
+    .order('when', { ascending: false });
+
+  if (e && p) {
+    q = q.or(`client_email.ilike.${e},phone.eq.${p}`);
+  } else if (e) {
+    q = q.ilike('client_email', e);
+  } else if (p) {
+    q = q.eq('phone', p);
+  } else {
+    return [];
   }
+
+  const { data, error } = await q;
+  if (error) { console.warn('history error', error); return []; }
+  return data || [];
+}
+
 
   async function renderUpcoming(){
     const rows = await fetchUpcoming({ email: client.email, phone: client.phone });
