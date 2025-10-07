@@ -46,7 +46,7 @@ function toMapsHref(address){
     }
     if      (name==='bookings') initBookings();
     else if (name==='slots')    loadSlots();
-    else if (name==='clients')  renderClients();
+    else if (name==='clients')  window.Clients?.render();
     else if (name==='settings') loadSettings();
   }
   (function wireTabs(){
@@ -617,6 +617,7 @@ function wireClients() {
 document.addEventListener('DOMContentLoaded', () => {
   wireLogin();
   wireClients();
+  window.Clients?.init();
 });
 
 /* removed legacy {fname} */
