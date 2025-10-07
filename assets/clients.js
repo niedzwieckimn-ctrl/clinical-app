@@ -253,10 +253,10 @@
   }
 
   // ====== API ======
-  window.Clients = {
-    init() { wire(); render(); },
-    render,
-    sync,             // do ręcznego wywołania z konsoli lub z przycisku
-    _debug: { clientsLoad, clientsSave }
-  };
+  init() {
+  wire();
+  sync();     // ⬅️ automatyczna synchronizacja przy starcie
+  render();
+},
+
 })();
