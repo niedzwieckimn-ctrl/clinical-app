@@ -164,7 +164,7 @@
   async function sync() {
     const { data, error } = await window.sb
       .from('bookings_view')
-      .select('client_name, client_email, client_phone')
+      .select('client_name, client_email, phone')
       .eq('status', 'Potwierdzona');
 
     if (error) { alert('Błąd synchronizacji: ' + error.message); return; }
@@ -178,7 +178,7 @@
           id,
           name: b.client_name || '',
           email: b.client_email || '',
-          phone: b.client_phone || '',
+          phone: b.phone || '',
           address: '', prefs: '', allergies: '', contras: '', notes: '',
           treatmentNotes: {}
         });
@@ -253,7 +253,7 @@
   }
 
   // ====== API ======
-  init() {
+  init();
   wire();
   sync();     // ⬅️ automatyczna synchronizacja przy starcie
   render();
