@@ -616,4 +616,3 @@ function wireClients() {
   // --- CLIENTS (LocalStorage) -----------------------------------------------
   
 /* removed legacy {fname} */
-)();
