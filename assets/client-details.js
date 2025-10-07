@@ -194,42 +194,111 @@ function buildNarrativeHTML(client, stats, rows){
 
     if (hypo) parts.push(`<p><b>Hipoteza robocza:</b> ${escapeHtml(hypo)}</p>`);
   }
+  // KONTEKST ŻYCIOWY – z klienta + uwag z rezerwacji (przeszłych i najbliższej)
+const allTextForCtx = gatherAllNotes(rows, (stats.upcoming && stats.upcoming[0]) || null, client);
+const ctx = extractContextFromNotes(allTextForCtx);
+const ctxBits = [];
+if (ctx.work === 'manual') ctxBits.push('praca fizyczna');
+if (ctx.work === 'desk')   ctxBits.push('praca siedząca/komputer');
+if (ctx.stress)            ctxBits.push('wysoki poziom stresu');
+if (ctx.sleep)             ctxBits.push('problemy ze snem');
+if (ctx.sports.includes('running'))  ctxBits.push('bieganie');
+if (ctx.sports.includes('strength')) ctxBits.push('trening siłowy');
+if (ctx.kids)              ctxBits.push('opieka nad dzieckiem');
+if (ctx.pets)              ctxBits.push('zwierzęta w domu');
+if (ctxBits.length) parts.push(`<p><b>Kontekst życiowy:</b> ${ctxBits.slice(0,3).join(' • ')}.</p>`);
+
   return parts.join('\n');
+}
+// Zbierz wszystkie notatki i uwagi w jeden tekst (klient + rezerwacje + lokalne notatki)
+function gatherAllNotes(rows, next, client){
+  const arr = [];
+  if (client?.notes) arr.push(client.notes);
+  if (client?.prefs) arr.push(client.prefs);
+  if (client?.contras) arr.push(client.contras);
+  if (client?.treatmentNotes) arr.push(...Object.values(client.treatmentNotes));
+  if (Array.isArray(rows)) arr.push(...rows.map(r => r?.notes).filter(Boolean));
+  if (next?.notes) arr.push(next.notes);
+  return arr.join(' ');
+}
+
+// Wyciągnij kontekst życia z notatek/uwag
+function extractContextFromNotes(text){
+  const s = String(text||'').toLowerCase();
+  const ctx = { work:null, stress:false, sleep:false, pets:false, kids:false, pregnant:false, sports:[], likes:[], dislikes:[] };
+
+  // praca
+  if (/(stolarn|budow|magazyn|fizyczn|kierowc|kurier)/.test(s)) ctx.work = 'manual';
+  else if (/(biur|komputer|siedząc|home office|programist|grafik|call center)/.test(s)) ctx.work = 'desk';
+
+  // stan/tryb życia
+  if (/(stres|przemęcz|wypalen|nerw)/.test(s)) ctx.stress = true;
+  if (/(bezsen|sen|problemy ze snem|nie śpi|nie spi)/.test(s)) ctx.sleep = true;
+  if (/(pies|kot|zwierzak|zwierzę)/.test(s)) ctx.pets = true;
+  if (/(dzieck|niemowl|karmieni)/.test(s)) ctx.kids = true;
+  if (/(ciąża|ciężarn|preg)/.test(s)) ctx.pregnant = true;
+
+  // sport
+  if (/(biega|bieg|maraton|triatlon)/.test(s)) ctx.sports.push('running');
+  if (/(siłown|gym|ciężar)/.test(s)) ctx.sports.push('strength');
+  if (/(rower|kolar)/.test(s)) ctx.sports.push('cycling');
+
+  // preferencje z notatek
+  if (/(cisz|bez gadania|spokój)/.test(s)) ctx.likes.push('cisza');
+  if (/(ciepł|cieplo|gorąc)/.test(s)) ctx.likes.push('ciepło');
+  if (/(mocn|głęb)/.test(s)) ctx.likes.push('mocniejszy nacisk');
+  if (/(nie lub|nie chce|unika|mniej .*zapach|mniej czekolad|mniej arom)/.test(s)) ctx.dislikes.push('intensywne aromaty');
+
+  return ctx;
 }
 
 
 // --- plan terapeutyczny na najbliższy zabieg (krótki) ---
-function buildPlanList(client, stats, next){
-  const likesHeat  = has(client.prefs,'ciepł','gorąc');
-  const avoidCoco  = has(client.allergies,'kokos');
-  const prefStrong = has(client.prefs,'mocn','głęb');
+function buildPlanList(client, stats, next, rows){
+  // wszystkie źródła (klient + historia + najbliższa rezerwacja)
+  const allNotes = gatherAllNotes(rows, next, client).toLowerCase();
+  const ctx = extractContextFromNotes(allNotes);
 
-  const corpus = (
-    (client.notes||'')+' '+(client.prefs||'')+' '+(client.contras||' ')+' '+
-    Object.values(client.treatmentNotes||{}).join(' ')+' '+
-    (next?.notes||'')
-  ).toLowerCase();
+  // preferencje/bezpieczeństwo (z klienta lub z notatek)
+  const likesHeat  = has(client.prefs, 'ciepł','gorąc') || /(ciepł|gorąc)/.test(allNotes);
+  const avoidCoco  = has(client.allergies, 'kokos')     || /kokos/.test(allNotes);
+  const prefStrong = has(client.prefs, 'mocn','głęb')   || /(mocny|głęb)/.test(allNotes);
 
-  // 1) Bezpieczeństwo / przygotowanie
+  // 1) Bezpieczeństwo / przygotowanie – PRIORYTET
   const base = [];
   if (likesHeat) base.push('Przygotować wyższy komfort cieplny; medium podgrzane.');
   if (avoidCoco) base.push('Użyć medium bez kokosa; aromat łagodny / neutralny.');
-  if (has(client.contras,'ciąża','preg')) base.push('Pozycje bezpieczne dla ciężarnych; bez punktów refleksyjnych.');
+  if (has(client.contras,'ciąża','preg') || ctx.pregnant) base.push('Pozycje bezpieczne dla ciężarnych; bez punktów refleksyjnych.');
   if (has(client.contras,'kręgosł','lędźw','dyskop')) base.push('Odc. L: powierzchownie; bez długich ucisków izometrycznych.');
+  if (ctx.stress) base.push('Tempo wolne, rytm kojący; pauzy oddechowe.');
+  if (ctx.sleep)  base.push('Zamknięcie: wyciszające techniki głowy/szyi.');
 
-  // 2) Rdzeń techniczny (reguły + „sznyt” usługi)
-  const tech = deriveTechniques(corpus, next?.service_name);
+  // 2) Rdzeń techniczny – dopasowanie do treści notatek + „sznyt” usługi
+  const tech = deriveTechniques(allNotes, next?.service_name);
 
-  // 3) Dodatki (sterowanie naciskiem, uwagi z rezerwacji, planowanie)
-  const extra = [];
-  if (prefStrong) extra.push('Nacisk zwiększać stopniowo; kontrola komfortu co 5–10 min.');
-  if (next?.notes) extra.push(`Uwaga klienta: „${escapeHtml(clip(next.notes))}”.`);
-  if (stats.avgInterval) extra.push(`Rytm wizyt: co ${stats.avgInterval<=21?'2–3':'3–4'} tygodnie.`);
-  extra.push('After-care: nawodnienie + 1–2 ćwiczenia mobilizacji barków / oddech.');
+  // 3) Dodatki kontekstowe
+  if (ctx.work === 'manual') tech.unshift('Przedramiona/nadgarstki: rozluźnianie zginaczy + trakcje promieniowo-łokciowe.');
+  if (ctx.work === 'desk')   tech.unshift('Odc. piersiowy: wydłużenie piersiowych i mobilizacja scapularna (postawa biurowa).');
+  if (ctx.sports.includes('running')) tech.push('Łydki/powięź podeszwowa: striping + rozluźnienie mięśniowo-powięziowe.');
+  if (prefStrong) base.push('Nacisk zwiększać stopniowo; kontrola komfortu co 5–10 min.');
 
-  // 4) Priorytetyzacja: base (safety) > tech > extra
-  return uniqCap([...base, ...tech, ...extra], planLimit());
+  // 4) Uwagi klienta – z najbliższej rezerwacji LUB najświeższych wpisów
+  let quotedNote = '';
+  if (next?.notes) quotedNote = next.notes;
+  else {
+    const byNewest = (rows||[]).slice().sort((a,b)=> new Date(b.when)-new Date(a.when));
+    quotedNote = (byNewest.find(r => r?.notes)?.notes) || '';
+  }
+  if (quotedNote) base.push(`Uwaga klienta: „${escapeHtml(clip(quotedNote))}”.`);
+
+  // 5) Planowanie po zabiegu
+  if (stats.avgInterval) base.push(`Rytm wizyt: co ${stats.avgInterval<=21?'2–3':'3–4'} tygodnie.`);
+  base.push('After-care: nawodnienie + 1–2 ćwiczenia mobilizacji barków / oddech.');
+
+  // 6) Priorytety: bezpieczeństwo(base) > techniki > dodatki; limit wg trybu
+  return uniqCap([...base, ...tech], planLimit());
 }
+
 
 
 // --- render sekcji „Sugestie” (plan + narracja) ---
@@ -239,8 +308,8 @@ async function renderSuggestions(){
   const out = await fetchClientBookings({ email: client.email, phone: client.phone });
   const stats = analyzeHistory(out.rows || []);
   const next  = stats.upcoming[0] || null;
+  const plan = buildPlanList(client, stats, next, out.rows || []);
 
-  const plan = buildPlanList(client, stats, next);
   const narrative = buildNarrativeHTML(client, stats, out.rows || []);
 
   const nextHdr = next ? `${fmtDatePL(next.when)} • ${escapeHtml(next.service_name||'-')}` : 'brak zaplanowanego zabiegu';
