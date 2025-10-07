@@ -206,10 +206,16 @@
     $('#client-search')?.addEventListener('input', render);
 
     // lista -> Szczegóły
-    $('#clients-rows')?.addEventListener('click', (e) => {
-      const details = e.target.closest('[data-client-details]');
-      if (details) { openClientDetails(details.dataset.clientDetails); }
-    });
+    // było: openClientDetails(...)
+
+$('#clients-rows')?.addEventListener('click', (e) => {
+  const details = e.target.closest('[data-client-details]');
+  if (!details) return;
+  const id = details.dataset.clientDetails;
+  // otwórz nowe okno/zakładkę
+  window.open('client.html?id=' + encodeURIComponent(id), '_blank', 'noopener');
+});
+
 
     // panel Szczegóły – nawigacja
     $('#cd-btn-back')?.addEventListener('click', () => { closeClientDetails(); });
