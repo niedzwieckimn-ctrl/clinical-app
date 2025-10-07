@@ -158,14 +158,14 @@
   <!-- Lista klientów -->
   <table class="bookings-table">
     <thead>
-      <tr>
-        <th>Imię i nazwisko</th>
-        <th>E-mail</th>
-        <th>Telefon</th>
-        <th>Ostatni zabieg</th>
-        <th>Akcje</th>
-      </tr>
-    </thead>
+  <tr>
+    <th>Imię i nazwisko</th>
+    <th>Adres</th>
+    <th>Szczegóły</th>
+  </tr>
+</thead>
+<tbody id="clients-rows"></tbody>
+
     <tbody id="clients-rows"></tbody>
   </table>
 </section>
@@ -198,63 +198,54 @@
 <script src="assets/clients.js"></script>
 
 <!-- Modal edycji klienta -->
-<div id="client-modal" class="modal hidden">
-  <div class="modal-content">
-    <button id="client-close" class="modal-close">×</button>
-    <h3 id="client-modal-title">Klient</h3>
-
-    <div class="stack">
-      <label>Imię i nazwisko <input id="c-name" type="text"></label>
-      <label>E-mail <input id="c-email" type="email"></label>
-      <label>Telefon <input id="c-phone" type="tel"></label>
-      <label>Adres (opcjonalnie) <input id="c-address" type="text"></label>
-      <label>Preferencje <textarea id="c-prefs" rows="2"></textarea></label>
-      <label>Uczulenia <textarea id="c-allergies" rows="2"></textarea></label>
-      <label>Przeciwwskazania <textarea id="c-contras" rows="2"></textarea></label>
-      <label>Notatki ogólne <textarea id="c-notes" rows="3"></textarea></label>
-    </div>
-
-    <div class="row" style="justify-content:flex-start;gap:.5rem;margin-top:.5rem">
-      <button id="btn-history-modal" class="btn">Historia zabiegów</button>
-      <button id="btn-suggestions-modal" class="btn">Sugestie terapeutyczne</button>
-    </div>
-
-    <div class="row" style="justify-content:flex-end;gap:.5rem;margin-top:1rem">
-      <button id="client-delete" class="btn btn-cancel">Usuń klienta</button>
-      <button id="client-save" class="btn btn-confirm">Zapisz</button>
+<div id="client-details" class="hidden">
+  <div class="flex items-center justify-between mb-3">
+    <h3 id="cd-title" class="text-lg font-semibold">Szczegóły klienta</h3>
+    <div class="space-x-2">
+      <button id="cd-btn-suggestions" class="btn">Sugestie</button>
+      <button id="cd-btn-upcoming"    class="btn">Nadchodzące zabiegi</button>
+      <button id="cd-btn-history"     class="btn">Historia zabiegów</button>
+      <button id="cd-btn-contact"     class="btn">Dane kontaktowe</button>
+      <button id="cd-btn-notes"       class="btn">Notatki</button>
+      <button id="cd-btn-back"        class="btn btn-cancel">Wróć</button>
     </div>
   </div>
-</div>
 
-<!-- Modal HISTORIA -->
-<div id="history-modal" class="modal hidden">
-  <div class="modal-content" style="max-width:800px">
-    <button id="history-close" class="modal-close">×</button>
-    <h3>Historia zabiegów</h3>
-    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:.5rem">
-      <span id="history-client-name"></span>
-    </div>
-    <table class="bookings-table">
-      <thead>
-        <tr>
-          <th>Data</th>
-          <th>Usługa</th>
-          <th>Notatka (lokalna)</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="history-rows"></tbody>
+  <div id="cd-section-suggestions" class="cd-section"></div>
+
+  <div id="cd-section-upcoming" class="cd-section hidden">
+    <table class="table">
+      <thead><tr><th>Termin</th><th>Usługa</th><th>Status</th></tr></thead>
+      <tbody id="cd-upcoming-rows"></tbody>
     </table>
   </div>
+
+  <div id="cd-section-history" class="cd-section hidden">
+    <table class="table">
+      <thead><tr><th>Termin</th><th>Usługa</th><th>Status</th></tr></thead>
+      <tbody id="cd-history-rows"></tbody>
+    </table>
+  </div>
+
+  <div id="cd-section-contact" class="cd-section hidden">
+    <p><b>E-mail:</b> <span id="cd-email">-</span></p>
+    <p><b>Telefon:</b> <span id="cd-phone">-</span></p>
+    <p><b>Adres:</b> <span id="cd-address">-</span></p>
+  </div>
+
+  <div id="cd-section-notes" class="cd-section hidden">
+    <div class="grid" style="gap:8px">
+      <label>Preferencje <textarea id="cd-prefs" rows="2"></textarea></label>
+      <label>Alergie <textarea id="cd-allergies" rows="2"></textarea></label>
+      <label>Przeciwwskazania <textarea id="cd-contras" rows="2"></textarea></label>
+      <label>Notatki <textarea id="cd-notes" rows="3"></textarea></label>
+    </div>
+    <div class="mt-2">
+      <button id="cd-save" class="btn">Zapisz</button>
+    </div>
+  </div>
 </div>
 
-<!-- Modal SUGESTIE -->
-<div id="suggestions-modal" class="modal hidden">
-  <div class="modal-content" style="max-width:600px">
-    <button id="suggestions-close" class="modal-close">×</button>
-    <h3>Sugestie terapeutyczne</h3>
-    <div id="suggestions-body" class="stack" style="padding:.75rem;background:#f7fafc;min-height:120px"></div>
-  </div>
 </div>
 </body>
 </html>
