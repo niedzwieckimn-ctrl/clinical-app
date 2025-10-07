@@ -34,51 +34,6 @@ const daysBetween = (a,b)=>Math.round((+b-+a)/86400000);
 const recencyWeight = (whenIso)=>{ const d=Math.abs((new Date()-new Date(whenIso))/86400000);
   if(d>HISTORY_WINDOW_DAYS) return 0; if(d>180) return .25; if(d>90) return .5; return 1; };
 
-/* === SUGESTIE: konfiguracja, helpery i reguły === */
-
-// --- LIMITY (żeby tekst był krótki) ---
-const MAX_PLAN_ITEMS = 6;        // maksymalnie 6 punktów planu
-const MAX_PREFS = 3;             // maks 3 preferencje w narracji
-const MAX_ALLERGIES = 3;         // maks 3 alergie
-const MAX_CONTRAS = 3;           // maks 3 przeciwwskazania
-const MAX_AREAS = 2;             // maks 2 dominujące obszary
-const HISTORY_WINDOW_DAYS = 365;  // analizujemy ostatni rok
-const CLIP_LEN = 120;             // skracanie cytatów/uwag
-
-// --- Helpery skracania i dopasowań ---
-const has = (txt, ...terms) => String(txt||'').toLowerCase()
-  && terms.some(t => String(txt||'').toLowerCase().includes(String(t).toLowerCase()));
-const daysBetween = (a,b) => Math.round((+b - +a) / 86400000);
-const clip = (s, n=CLIP_LEN) => {
-  const t = String(s||'').trim(); return t.length<=n ? t : t.slice(0, n-1)+'…';
-};
-const csvList = (s, max=3) => String(s||'')
-  .split(/[;,/|]/).map(x=>x.trim()).filter(Boolean)
-  .filter((v,i,a)=>a.findIndex(z=>z.toLowerCase()===v.toLowerCase())===i)
-  .slice(0,max);
-const uniqCap = (arr, max) => {
-  const out=[]; for (const it of arr) if (!out.includes(it)) out.push(it); return out.slice(0,max);
-};
-const recencyWeight = (whenIso) => {
-  const d = Math.abs((new Date() - new Date(whenIso)) / 86400000);
-  if (d > HISTORY_WINDOW_DAYS) return 0; if (d > 180) return 0.25; if (d > 90) return 0.5; return 1.0;
-};
-
-// --- (opcjonalnie) jeśli nie masz tych dwóch helperów, odkomentuj:
-// function normEmail(e){ return String(e||'').trim().toLowerCase(); }
-// function normPhone(p){ return String(p||'').replace(/[^\d+]/g,''); }
-
-// --- (opcjonalnie) jeśli nie masz: pobranie wszystkich zabiegów klienta
-// async function fetchClientBookings({ email, phone }) {
-//   const e = normEmail(email), p = normPhone(phone);
-//   if (!e && !p) return { rows: [], reason: 'Brak e-maila/telefonu' };
-//   let q = window.sb.from('bookings_view').select('*').order('when',{ascending:true});
-//   const parts = []; if (e) parts.push(`client_email.ilike.${e}`); if (p) parts.push(`phone.eq.${p}`);
-//   q = q.or(parts.join(','));
-//   const { data, error } = await q;
-//   if (error) return { rows: [], reason: error.message };
-//   return { rows: data || [], reason: null };
-// }
 
 // --- reguły technik i „sznyt” usług ---
 // — TECHNIKI wg słów-kluczy (rozszerzone)
@@ -222,27 +177,26 @@ function buildNarrativeHTML(client, stats, rows){
   parts.push(`<p><b>Historia:</b> ${hist.join(' • ') || 'brak danych'}.</p>`);
   parts.push(`<p><b>Dominujące obszary:</b> ${areas.length ? areas.join(', ') : 'brak jednoznacznych wskazań'}.</p>`);
   // Hipoteza robocza (tylko w trybie szczegółowym)
-if (SG_DETAILED){
-  const textAll = [
-    client.notes, client.prefs, client.contras,
-    ...Object.values(client.treatmentNotes||{}),
-    ...(rows||[]).map(r=>r.notes)
-  ].join(' ').toLowerCase();
+  if (SG_DETAILED){
+    const textAll = [
+      client.notes, client.prefs, client.contras,
+      ...Object.values(client.treatmentNotes||{}),
+      ...(rows||[]).map(r=>r.notes)
+    ].join(' ').toLowerCase();
 
-  let hypo = null;
-  if (/stolarn|praca fizyczna|manualn/.test(textAll) && /(bark|łopatk|szyj)/.test(textAll))
-    hypo = 'Przeciążeniowy wzorzec obręczy barkowej z komponentą szyjno-piersiową (overuse).';
-  else if (/(lędźw|dyskop|rwa)/.test(textAll))
-    hypo = 'Wrażliwość odcinka lędźwiowego – preferować techniki powierzchowne, bez kompresji.';
-  else if (/(stres|bezsen|przemęcz)/.test(textAll))
-    hypo = 'Dominujące napięcie ogólnoustrojowe (stres) – praca globalna, rytm kojący.';
+    let hypo = null;
+    if (/stolarn|praca fizyczna|manualn/.test(textAll) && /(bark|łopatk|szyj)/.test(textAll))
+      hypo = 'Przeciążeniowy wzorzec obręczy barkowej z komponentą szyjno-piersiową (overuse).';
+    else if (/(lędźw|dyskop|rwa)/.test(textAll))
+      hypo = 'Wrażliwość odcinka lędźwiowego – preferować techniki powierzchowne, bez kompresji.';
+    else if (/(stres|bezsen|przemęcz)/.test(textAll))
+      hypo = 'Dominujące napięcie ogólnoustrojowe (stres) – praca globalna, rytm kojący.';
 
-  if (hypo) parts.push(`<p><b>Hipoteza robocza:</b> ${escapeHtml(hypo)}</p>`);
-}
-return parts.join('\n');
-
+    if (hypo) parts.push(`<p><b>Hipoteza robocza:</b> ${escapeHtml(hypo)}</p>`);
+  }
   return parts.join('\n');
 }
+
 
 // --- plan terapeutyczny na najbliższy zabieg (krótki) ---
 function buildPlanList(client, stats, next){
@@ -375,19 +329,6 @@ document.getElementById('sg-detailed')?.addEventListener('change', async (e)=>{
   $('#cd-email').textContent = client.email || '-';
   $('#cd-phone').textContent = client.phone || '-';
   $('#cd-address').textContent = client.address || '-';
-
-  // ===== SUGESTIE =====
-  function buildSuggestions(c){
-    const out = [];
-    const txt = (s)=>String(s||'').toLowerCase();
-    if (txt(c.allergies).includes('olej')) out.push('Unikaj olejków zapachowych.');
-    if (txt(c.prefs).includes('mocny'))    out.push('Lubi mocny masaż.');
-    if (Object.keys(c.treatmentNotes||{}).length > 3) out.push('Klient regularny – zaproponuj pakiet.');
-    if (!out.length) out.push('Brak szczególnych zaleceń.');
-    return out.join('<br>');
-  }
-  $('#cd-section-suggestions').innerHTML = buildSuggestions(client);
-  showSection('cd-section-suggestions');
 
   // ===== SUPABASE QUERIES =====
  // pobiera wszystkie zabiegi klienta; resztę filtrujemy lokalnie
