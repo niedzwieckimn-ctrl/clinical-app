@@ -87,23 +87,35 @@
 
   // ---------- FORM / MODALE ----------
   function openClientModal(id) {
-    const list = clientsLoad();
-    let c = list.find(x => x.id === id);
-    if (!c) { c = clientNew(); c.id = id || c.id; list.push(c); clientsSave(list); }
-    CLIENT_EDIT_ID = c.id;
+  const list = clientsLoad();
+  let c = list.find(x => x.id === id);
+  if (!c) { c = clientNew(); c.id = id || c.id; list.push(c); clientsSave(list); }
+  CLIENT_EDIT_ID = c.id;
 
-    $('#client-modal-title')?.textContent = c.name || 'Nowy klient';
-    $('#c-name')?.setAttribute('value',''); // zapobiega pustym undefined w auto-wypełnianiu
-    $('#c-name').value = c.name || '';
-    $('#c-email').value = c.email || '';
-    $('#c-phone').value = c.phone || '';
-    $('#c-address').value = c.address || '';
-    $('#c-prefs').value = c.prefs || '';
-    $('#c-allergies').value = c.allergies || '';
-    $('#c-contras').value = c.contras || '';
-    $('#c-notes').value = c.notes || '';
-    $('#client-modal')?.classList.remove('hidden');
-  }
+  // bezpieczne settery — nie wywalą się, jeśli pole nie istnieje
+  const setVal = (elId, val='') => {
+    const el = document.getElementById(elId);
+    if (el) el.value = val || '';
+  };
+  const setText = (elId, txt='') => {
+    const el = document.getElementById(elId);
+    if (el) el.textContent = txt || '';
+  };
+
+  setText('client-modal-title', c.name || 'Nowy klient');
+  setVal('c-name',      c.name);
+  setVal('c-email',     c.email);
+  setVal('c-phone',     c.phone);
+  setVal('c-address',   c.address);
+  setVal('c-prefs',     c.prefs);
+  setVal('c-allergies', c.allergies);
+  setVal('c-contras',   c.contras);
+  setVal('c-notes',     c.notes);
+
+  const modal = document.getElementById('client-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
 
   function closeClientModal() {
     $('#client-modal')?.classList.add('hidden');
@@ -111,7 +123,7 @@
   }
 
   function readClientForm() {
-    const existing = clientsLoad().find(x => x.id - CLIENT_EDIT_ID) || {};
+    const existing = clientsLoad().find(x => x.id === CLIENT_EDIT_ID) || {};
     return {
       id: CLIENT_EDIT_ID,
       name: ($('#c-name')?.value || '').trim(),
