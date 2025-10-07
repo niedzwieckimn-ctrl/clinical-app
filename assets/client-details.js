@@ -127,26 +127,53 @@ async function renderHistory(){
   const tbody = document.getElementById('cd-history-rows'); if (!tbody) return;
 
   if (out.reason && !out.rows.length) {
-    tbody.innerHTML = `<tr><td colspan="3">${escapeHtml(out.reason)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4">${escapeHtml(out.reason)}</td></tr>`;
     return;
   }
 
   const now = new Date();
-  const rows = out.rows.filter(r => new Date(r.when) < now && r.status !== 'Anulowana')
-                       .sort((a,b) => new Date(b.when) - new Date(a.when));
+  const rows = out.rows
+    .filter(r => new Date(r.when) < now && r.status !== 'Anulowana')
+    .sort((a,b) => new Date(b.when) - new Date(a.when));
 
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="3">Brak historii</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4">Brak historii</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = rows.map(it => `
-    <tr>
-      <td>${fmtDatePL(it.when)}</td>
-      <td>${escapeHtml(it.service_name || '-')}</td>
-      <td>${escapeHtml(it.status || '-')}</td>
-    </tr>
-  `).join('');
+  // klucz notatki: preferuj booking_no; fallback: when|service
+  const localNotes = (client.treatmentNotes || {});
+  tbody.innerHTML = rows.map(it => {
+    const key = it.booking_no || `${it.when}|${it.service_name||''}`;
+    const curr = localNotes[key] || '';
+    return `
+      <tr data-key="${encodeURIComponent(key)}">
+        <td>${fmtDatePL(it.when)}</td>
+        <td>${escapeHtml(it.service_name || '-')}</td>
+        <td>${escapeHtml(it.status || '-')}</td>
+        <td>
+          <div style="display:flex; gap:6px; align-items:flex-start">
+            <textarea class="hist-note" rows="2" style="min-width:260px">${escapeHtml(curr)}</textarea>
+            <button class="btn" data-save-hist="${encodeURIComponent(key)}">Zapisz</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function setBtnCount(id, baseLabel, n){
+  const el = document.getElementById(id);
+  if (el) el.textContent = `${baseLabel} (${n})`;
+}
+
+async function refreshCounts(){
+  const out = await fetchClientBookings({ email: client.email, phone: client.phone });
+  const now = new Date();
+  const upcoming = out.rows.filter(r => new Date(r.when) >= now && r.status !== 'Anulowana').length;
+  const history  = out.rows.filter(r => new Date(r.when) <  now && r.status !== 'Anulowana').length;
+  setBtnCount('cd-btn-upcoming', 'Nadchodzące zabiegi', upcoming);
+  setBtnCount('cd-btn-history',  'Historia zabiegów',   history);
 }
 
 
@@ -171,7 +198,9 @@ async function renderHistory(){
   }
 
   // ===== BUTTONS =====
-  renderUpcoming().then(() => showSection('cd-section-upcoming'));
+renderUpcoming().then(() => showSection('cd-section-upcoming'));
+refreshCounts(); // ← doda liczby do przycisków
+
 
 
   $('#cd-btn-upcoming')?.addEventListener('click', async () => {
@@ -183,6 +212,25 @@ async function renderHistory(){
     await renderHistory();
     showSection('cd-section-history');
   });
+// zapis uwag terapeutki w Historii (localStorage)
+document.getElementById('cd-history-rows')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-save-hist]');
+  if (!btn) return;
+  const key = decodeURIComponent(btn.getAttribute('data-save-hist') || '');
+  const tr = btn.closest('tr');
+  const val = tr?.querySelector('.hist-note')?.value || '';
+
+  const list = clientsLoad();
+  const idx = list.findIndex(x => x.id === id);
+  if (idx < 0) return;
+  list[idx].treatmentNotes = list[idx].treatmentNotes || {};
+  list[idx].treatmentNotes[key] = val;
+  clientsSave(list);
+  client = list[idx]; // odśwież referencję
+
+  btn.textContent = 'Zapisano';
+  setTimeout(() => { btn.textContent = 'Zapisz'; }, 1000);
+});
 
   $('#cd-btn-contact')?.addEventListener('click', () => {
     showSection('cd-section-contact');
@@ -200,4 +248,5 @@ async function renderHistory(){
     window.close();
     setTimeout(() => { location.href = 'admin.html#clients'; }, 200);
   });
+  
 })();
