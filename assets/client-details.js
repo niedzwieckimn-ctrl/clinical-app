@@ -11,6 +11,29 @@
     catch { return iso || ''; }
   };
   const qs = new URLSearchParams(location.search);
+  // === SUGESTIE: TRYB SZCZEGÓŁOWY ===
+let SG_DETAILED = false;
+
+const MAX_PLAN_ITEMS_SHORT = 6;   // plan w trybie krótkim
+const MAX_PLAN_ITEMS_DETAILED = 12; // plan w trybie szczegółowym
+const MAX_PREFS = 3;
+const MAX_ALLERGIES = 3;
+const MAX_CONTRAS = 3;
+const MAX_AREAS = 2;
+const HISTORY_WINDOW_DAYS = 365;
+const CLIP_LEN = 120;
+
+const planLimit = () => (SG_DETAILED ? MAX_PLAN_ITEMS_DETAILED : MAX_PLAN_ITEMS_SHORT);
+
+const clip = (s, n=CLIP_LEN) => { const t=String(s||'').trim(); return t.length<=n? t : t.slice(0,n-1)+'…'; };
+const csvList = (s, max=3) => String(s||'').split(/[;,/|]/).map(x=>x.trim()).filter(Boolean)
+  .filter((v,i,a)=>a.findIndex(z=>z.toLowerCase()===v.toLowerCase())===i).slice(0,max);
+const uniqCap = (arr,max) => { const out=[]; for(const it of arr) if(!out.includes(it)) out.push(it); return out.slice(0,max); };
+const has = (txt,...terms)=>{ const s=String(txt||'').toLowerCase(); return terms.some(t=>s.includes(String(t).toLowerCase())); };
+const daysBetween = (a,b)=>Math.round((+b-+a)/86400000);
+const recencyWeight = (whenIso)=>{ const d=Math.abs((new Date()-new Date(whenIso))/86400000);
+  if(d>HISTORY_WINDOW_DAYS) return 0; if(d>180) return .25; if(d>90) return .5; return 1; };
+
 /* === SUGESTIE: konfiguracja, helpery i reguły === */
 
 // --- LIMITY (żeby tekst był krótki) ---
@@ -58,75 +81,73 @@ const recencyWeight = (whenIso) => {
 // }
 
 // --- reguły technik i „sznyt” usług ---
+// — TECHNIKI wg słów-kluczy (rozszerzone)
 const TECH_RULES = [
-  { match: ['bark','barki','obręcz','łopatk','dźwigacz','czworoboczny'],
-    recs: [
-      'Akcent na obręcz barkową: punkty spustowe górnego czworobocznego i dźwigacza łopatki (30–60 s/punkt).',
-      'Mobilizacje łopatki (ślizgi scapulothoracic, depresja/rotacja) w odciążeniu.',
-      'Forearm sweeping wzdłuż pasm przykręgosłupowych Th; tempo wolne–umiarkowane.'
+  { match:['bark','barki','obręcz','łopatk','dźwigacz','czworoboczny'],
+    recs:[
+      'Obręcz barkowa: punkty spustowe UT/LS (30–60 s/punkt, 2–3 powt.).',
+      'Mobilizacje łopatki: ślizgi scapulothoracic, depresja/rotacja w odciążeniu.',
+      'Forearm sweeping przykręgosłupowo Th; tempo wolne–umiarkowane.',
+      ...(SG_DETAILED ? [
+        'Segment: barki 8–10 min (progresja nacisku 2→4/5).',
+        'Łącz technikę striping na pasmach z rozciąganiem biernym w oddechu.'
+      ] : [])
     ]},
-  { match: ['szyj','kark','bóle głowy','migren'],
-    recs: [
-      'Wydłużenia mięśni podpotylicznych + delikatne trakcje szyjne.',
+  { match:['szyj','kark','migren','bóle głowy'],
+    recs:[
+      'Wydłużenia podpotylicznych + delikatne trakcje szyjne.',
       'MOS i pochyłe: uciski statyczne 20–30 s z oddechem.',
-      'Techniki nerwowo-mięśniowe pasma karku (bez bólu ostrego).'
+      ...(SG_DETAILED ? ['Praca przy wydechu; bez sprężynowania; segment szyja 6–8 min.'] : [])
     ]},
-  { match: ['lędźw','lędz','dyskop','rwa kulsz','lumbal','ból plec'],
-    cautions: [
-      'Unikać długotrwałego ucisku izometrycznego na odcinku lędźwiowym.',
-      'Bez agresywnych technik na wyrostki kolczyste.'
-    ],
-    recs: [
-      'Powierzchowne rozluźnienie prostowników grzbietu (forearm glides, 2–3 przejścia).',
-      'Kwadratus lumborum: uciski statyczne + wydłużenia w oddechu.',
-      'Mobilizacja miednicy w odciążeniu (rocking).'
+  { match:['lędźw','lędz','dyskop','rwa kulsz','lumbal','ból plec'],
+    cautions:['Odc. L: bez długich ucisków izometrycznych; nie pracować na wyrostkach kolczystych.'],
+    recs:[
+      'Rozluźnienie prostowników grzbietu (forearm glides, 2–3 przejścia).',
+      'QL: uciski statyczne + wydłużenia w oddechu.',
+      ...(SG_DETAILED ? ['Rocking miednicy; segment lędźwie 6–8 min, nacisk ≤3/5.'] : [])
     ]},
-  { match: ['stolarn','praca fizyczna','łokieć','przedrami','nadgarst'],
-    recs: [
-      'Striping i poprzeczne frikcje zginaczy nadgarstka (30–45 s).',
+  { match:['stolarn','praca fizyczna','łokieć','przedrami','nadgarst'],
+    recs:[
+      'Striping i poprzeczne frikcje zginaczy nadgarstka 30–45 s.',
       'Trakcja/ślizgi promieniowo-łokciowe niskiej amplitudy.',
-      'Po: rozciąganie zginaczy nadgarstka 2×30 s.'
+      ...(SG_DETAILED ? ['Po: rozciąganie zginaczy nadgarstka 2×30 s + edukacja ergonomii chwytu.'] : [])
     ]},
-  { match: ['stres','bezsen','przemęcz','napięcie ogólne'],
-    recs: [
-      'Effleurage całego ciała w tempie wolnym, z akcentem na wydech.',
-      'Sekwencja kojąca na przeponę (kontakt na żebrach dolnych, 4–6 cykli).',
-      'Zamknięcie: głaskania powięziowe karku i czoła.'
+  { match:['stres','bezsen','przemęcz','napięcie ogólne'],
+    recs:[
+      'Effleurage globalny, rytm kojący; akcent na wydech.',
+      ...(SG_DETAILED ? ['Sekwencja na przeponę 4–6 cykli; zamknięcie głaskaniami czoła/karku.'] : [])
     ]},
 ];
 
 const SERVICE_RULES = {
   'Masaż królewski Lomi Lomi': [
-    'Długie, płynne sekwencje przedramieniem (Lomi), łączenie segmentów ciała.',
-    'Rytm kołyszący; minimalna liczba przestawień rąk.'
+    'Płynne sekwencje przedramieniem (Lomi), łączenie segmentów ciała.',
+    ...(SG_DETAILED ? ['Kołyszący rytm, minimalne przestawienia; segmenty łączone.'] : [])
   ],
   'Masaż relaksacyjny ciała': [
-    'Effleurage globalny; progresja nacisku 1→3/5.',
-    'Mniej pracy punktowej, więcej pracy globalnej.'
+    'Effleurage całego ciała; progresja nacisku 1→3/5.',
+    ...(SG_DETAILED ? ['Mniej pracy punktowej, więcej globalnej; pauzy oddechowe.'] : [])
   ],
   'Masaż ciepłą czekoladą': [
-    'Medium podgrzane; praca raczej powierzchowna, bez szybkiego tarcia.',
-    'Aromat łagodny; unikać kompozycji konfliktowych z alergiami.'
+    'Medium podgrzane; praca raczej powierzchowna.',
+    ...(SG_DETAILED ? ['Aromat łagodny; unikać szybkiego tarcia. Segment rozgrzewka 5–7 min.'] : [])
   ],
-  'Aromaterapia': [
-    'Bezpieczny dobór nuty (test skórny), niska dawka; tempo spokojne.'
-  ],
-  '_default': [
-    'Rozgrzewka → akcent na obszary problemowe → wyciszenie.'
-  ]
+  '_default': ['Rozgrzewka → akcent na obszary problemowe → wyciszenie.']
 };
 
 function deriveTechniques(corpus, serviceName){
-  const items = [], cauts = [];
-  for (const r of TECH_RULES) {
-    if (!(r.match||[]).some(k => corpus.includes(k))) continue;
+  const items=[], cauts=[];
+  for (const r of TECH_RULES){
+    if (!(r.match||[]).some(k=>corpus.includes(k))) continue;
     if (r.cautions) cauts.push(...r.cautions);
     if (r.recs)     items.push(...r.recs);
   }
-  const svc = SERVICE_RULES[serviceName || ''] || SERVICE_RULES._default;
+  const svc = SERVICE_RULES[serviceName||''] || SERVICE_RULES._default;
   const all = [...cauts, ...svc, ...items];
-  return uniqCap(all, MAX_PLAN_ITEMS + 4); // damy bufor, później przytniemy
+  // mały bufor, przytniemy później wg planLimit()
+  return uniqCap(all, planLimit()+6);
 }
+
 
 // --- statystyki z historii (past/upcoming, naj, odstępy) ---
 function analyzeHistory(rows){
@@ -200,41 +221,62 @@ function buildNarrativeHTML(client, stats, rows){
   if (stats.avgInterval) hist.push(`odstęp: ~${stats.avgInterval} dni`);
   parts.push(`<p><b>Historia:</b> ${hist.join(' • ') || 'brak danych'}.</p>`);
   parts.push(`<p><b>Dominujące obszary:</b> ${areas.length ? areas.join(', ') : 'brak jednoznacznych wskazań'}.</p>`);
+  // Hipoteza robocza (tylko w trybie szczegółowym)
+if (SG_DETAILED){
+  const textAll = [
+    client.notes, client.prefs, client.contras,
+    ...Object.values(client.treatmentNotes||{}),
+    ...(rows||[]).map(r=>r.notes)
+  ].join(' ').toLowerCase();
+
+  let hypo = null;
+  if (/stolarn|praca fizyczna|manualn/.test(textAll) && /(bark|łopatk|szyj)/.test(textAll))
+    hypo = 'Przeciążeniowy wzorzec obręczy barkowej z komponentą szyjno-piersiową (overuse).';
+  else if (/(lędźw|dyskop|rwa)/.test(textAll))
+    hypo = 'Wrażliwość odcinka lędźwiowego – preferować techniki powierzchowne, bez kompresji.';
+  else if (/(stres|bezsen|przemęcz)/.test(textAll))
+    hypo = 'Dominujące napięcie ogólnoustrojowe (stres) – praca globalna, rytm kojący.';
+
+  if (hypo) parts.push(`<p><b>Hipoteza robocza:</b> ${escapeHtml(hypo)}</p>`);
+}
+return parts.join('\n');
+
   return parts.join('\n');
 }
 
 // --- plan terapeutyczny na najbliższy zabieg (krótki) ---
 function buildPlanList(client, stats, next){
-  const likesHeat  = has(client.prefs, 'ciepł','gorąc');
-  const avoidCoco  = has(client.allergies, 'kokos');
-  const prefStrong = has(client.prefs, 'mocn','głęb');
+  const likesHeat  = has(client.prefs,'ciepł','gorąc');
+  const avoidCoco  = has(client.allergies,'kokos');
+  const prefStrong = has(client.prefs,'mocn','głęb');
 
   const corpus = (
-    (client.notes||'')+' '+(client.prefs||'')+' '+(client.contras||'')+' '+
+    (client.notes||'')+' '+(client.prefs||'')+' '+(client.contras||' ')+' '+
     Object.values(client.treatmentNotes||{}).join(' ')+' '+
-    (next?.notes || '')
+    (next?.notes||'')
   ).toLowerCase();
 
+  // 1) Bezpieczeństwo / przygotowanie
   const base = [];
-  // bezpieczeństwo/przygotowanie
   if (likesHeat) base.push('Przygotować wyższy komfort cieplny; medium podgrzane.');
   if (avoidCoco) base.push('Użyć medium bez kokosa; aromat łagodny / neutralny.');
   if (has(client.contras,'ciąża','preg')) base.push('Pozycje bezpieczne dla ciężarnych; bez punktów refleksyjnych.');
-  if (has(client.contras,'kręgosł','lędźw','dyskop')) base.push('Odcinek L: praca powierzchowna, bez długich ucisków izometrycznych.');
+  if (has(client.contras,'kręgosł','lędźw','dyskop')) base.push('Odc. L: powierzchownie; bez długich ucisków izometrycznych.');
 
-  // techniki z reguł + „sznyt” usługi
+  // 2) Rdzeń techniczny (reguły + „sznyt” usługi)
   const tech = deriveTechniques(corpus, next?.service_name);
 
-  // dodatkowe dopasowania
-  if (prefStrong) base.push('Nacisk zwiększać stopniowo; kontrola komfortu co 5–10 min.');
-  if (next?.notes) base.push(`Uwaga klienta: „${escapeHtml(clip(next.notes))}”.`);
-  if (stats.avgInterval) base.push(`Rytm wizyt: co ${stats.avgInterval <= 21 ? '2–3' : '3–4'} tygodnie.`);
-  base.push('After-care: nawodnienie + 1–2 ćwiczenia mobilizacji barków / oddech.');
+  // 3) Dodatki (sterowanie naciskiem, uwagi z rezerwacji, planowanie)
+  const extra = [];
+  if (prefStrong) extra.push('Nacisk zwiększać stopniowo; kontrola komfortu co 5–10 min.');
+  if (next?.notes) extra.push(`Uwaga klienta: „${escapeHtml(clip(next.notes))}”.`);
+  if (stats.avgInterval) extra.push(`Rytm wizyt: co ${stats.avgInterval<=21?'2–3':'3–4'} tygodnie.`);
+  extra.push('After-care: nawodnienie + 1–2 ćwiczenia mobilizacji barków / oddech.');
 
-  // priorytety: bezpieczeństwo (base) > techniki
-  const merged = uniqCap([...base, ...tech], MAX_PLAN_ITEMS);
-  return merged;
+  // 4) Priorytetyzacja: base (safety) > tech > extra
+  return uniqCap([...base, ...tech, ...extra], planLimit());
 }
+
 
 // --- render sekcji „Sugestie” (plan + narracja) ---
 async function renderSuggestions(){
@@ -249,20 +291,26 @@ async function renderSuggestions(){
 
   const nextHdr = next ? `${fmtDatePL(next.when)} • ${escapeHtml(next.service_name||'-')}` : 'brak zaplanowanego zabiegu';
 
-  box.innerHTML = `
-    <div class="card" style="margin-bottom:12px">
+ box.innerHTML = `
+  <div class="card" style="margin-bottom:12px">
+    <div style="display:flex; gap:12px; align-items:center; justify-content:space-between">
       <h3 style="margin:6px 0">Sugestie terapeutyczne – najbliższa wizyta (${nextHdr})</h3>
-      ${plan.length ? `<ul style="margin:6px 0 10px 18px">${plan.map(it=>`<li>${it}</li>`).join('')}</ul>` : '<p>Brak szczególnych zaleceń.</p>'}
-      <button id="sg-save-plan" class="btn">Zapisz plan do Notatek</button>
+      <label style="display:flex; gap:6px; align-items:center; font-weight:500">
+        <input type="checkbox" id="sg-detailed" ${SG_DETAILED?'checked':''}/> Szczegółowy
+      </label>
     </div>
-    <div class="card">
-      <h3 style="margin:6px 0">Narracja kliniczna (podsumowanie klienta)</h3>
-      <div id="sg-narrative" style="line-height:1.5">${narrative}</div>
-      <div style="margin-top:8px">
-        <button id="sg-save-narr" class="btn">Zapisz narrację do Notatek</button>
-      </div>
+    ${plan.length ? `<ul style="margin:6px 0 10px 18px">${plan.map(it=>`<li>${it}</li>`).join('')}</ul>` : '<p>Brak szczególnych zaleceń.</p>'}
+    <button id="sg-save-plan" class="btn">Zapisz plan do Notatek</button>
+  </div>
+  <div class="card">
+    <h3 style="margin:6px 0">Narracja kliniczna (podsumowanie klienta)</h3>
+    <div id="sg-narrative" style="line-height:1.5">${narrative}</div>
+    <div style="margin-top:8px">
+      <button id="sg-save-narr" class="btn">Zapisz narrację do Notatek</button>
     </div>
-  `;
+  </div>
+`;
+
 
   const saveBlock = (title, text) => {
     const list = clientsLoad(); const idx = list.findIndex(x=>x.id === id); if (idx < 0) return;
@@ -270,6 +318,11 @@ async function renderSuggestions(){
     list[idx].notes = (list[idx].notes || '') + `\n--- ${title} ${stamp} ---\n` + text + '\n';
     clientsSave(list); client = list[idx]; alert('Zapisano do Notatek.');
   };
+document.getElementById('sg-detailed')?.addEventListener('change', async (e)=>{
+  SG_DETAILED = !!e.target.checked;
+  await renderSuggestions();           // prze-renderuj w nowym trybie
+  showSection('cd-section-suggestions');
+});
 
   document.getElementById('sg-save-plan')?.addEventListener('click', () => {
     const txt = plan.map(x => '• '+ x.replace(/<[^>]+>/g,'')).join('\n');
