@@ -111,7 +111,7 @@
   }
 
   function readClientForm() {
-    const existing = clientsLoad().find(x => x.id === CLIENT_EDIT_ID) || {};
+    const existing = clientsLoad().find(x => x.id - CLIENT_EDIT_ID) || {};
     return {
       id: CLIENT_EDIT_ID,
       name: ($('#c-name')?.value || '').trim(),
