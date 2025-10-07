@@ -467,7 +467,7 @@ async function fetchHistoryFromSupabase({ email, phone }) {
 // Modal HISTORIA
 let HISTORY_CURRENT_ID = null;
 
-async async function openHistoryModal(clientId) {
+async function openHistoryModal(clientId) {
   const list = clientsLoad();
   const c = list.find(x => x.id === clientId);
   if (!c) return;
