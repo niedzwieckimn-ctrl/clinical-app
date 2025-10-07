@@ -67,88 +67,88 @@
   showSection('cd-section-suggestions');
 
   // ===== SUPABASE QUERIES =====
-  // Nadchodzące (>= now, != Anulowana), dopasuj po email (ILIKE) lub phone (eq)
-  async function fetchUpcoming({ email, phone }){
-    const nowIso = new Date().toISOString();
-    const e = normEmail(email);
-    const p = normPhone(phone);
+ // pobiera wszystkie zabiegi klienta; resztę filtrujemy lokalnie
+async function fetchClientBookings({ email, phone }) {
+  const e = normEmail(email);
+  const p = normPhone(phone);
 
-    let q = window.sb.from('bookings_view')
-      .select('when, service_name, status')
-      .gte('when', nowIso)
-      .neq('status','Anulowana')
-      .order('when', { ascending: true });
+  if (!e && !p) return { rows: [], reason: 'Brak e-maila/telefonu u klienta' };
 
-    if (!e && !p) return { rows: [], reason: 'Brak e-maila/telefonu u klienta' };
+  let q = sb.from('bookings_view')
+    .select('*')                                // bierzemy wszystko, w tym 'notes'
+    .order('when', { ascending: true });
 
-    const parts = [];
-    if (e) parts.push(`client_email.ilike.${e}`);
-    if (p) parts.push(`phone.eq.${p}`);
-    q = q.or(parts.join(','));
+  const parts = [];
+  if (e) parts.push(`client_email.ilike.${e}`);
+  if (p) parts.push(`phone.eq.${p}`);
+  q = q.or(parts.join(','));
 
-    const { data, error } = await q;
-    if (error) { console.warn('[upcoming] supabase:', error); return { rows: [], reason: error.message }; }
-    return { rows: data || [], reason: null };
-  }
+  const { data, error } = await q;
+  if (error) return { rows: [], reason: error.message };
+  return { rows: data || [], reason: null };
+}
 
-  // Historia (< now, != Anulowana), dopasuj po email (ILIKE) lub phone (eq)
-  async function fetchHistory({ email, phone }){
-    const nowIso = new Date().toISOString();
-    const e = normEmail(email);
-    const p = normPhone(phone);
-
-    let q = window.sb.from('bookings_view')
-      .select('when, service_name, status, notes')
-      .lt('when', nowIso)
-      .neq('status','Anulowana')
-      .order('when', { ascending: false });
-
-    if (!e && !p) return { rows: [], reason: 'Brak e-maila/telefonu u klienta' };
-
-    const parts = [];
-    if (e) parts.push(`client_email.ilike.${e}`);
-    if (p) parts.push(`phone.eq.${p}`);
-    q = q.or(parts.join(','));
-
-    const { data, error } = await q;
-    if (error) { console.warn('[history] supabase:', error); return { rows: [], reason: error.message }; }
-    return { rows: data || [], reason: null };
-  }
 
   // ===== RENDERERS =====
-  async function renderUpcoming(){
-    const out = await fetchUpcoming({ email: client.email, phone: client.phone });
-    const tbody = document.getElementById('cd-upcoming-rows'); if (!tbody) return;
-   
- if (!out.rows.length) {
-   tbody.innerHTML = `<tr><td colspan="4">${escapeHtml(out.reason || 'Brak nadchodzących')}</td></tr>`;
-   return;
- }
- tbody.innerHTML = out.rows.map(it => `
-   <tr>
-     <td>${fmtDatePL(it.when)}</td>
-     <td>${escapeHtml(it.service_name||'-')}</td>
-     <td>${escapeHtml(it.status||'-')}</td>
-     <td>${escapeHtml(it.notes||'-')}</td>
-   </tr>
- `).join('');
+ function noteFor(r){
+  // na wszelki wypadek złap też inne możliwe nazwy
+  return r.notes ?? r.note ?? r.admin_notes ?? r.uwagi ?? r.comment ?? r.comments ?? r.remark ?? r.remarks ?? '';
+}
 
+async function renderUpcoming(){
+  const out = await fetchClientBookings({ email: client.email, phone: client.phone });
+  const tbody = document.getElementById('cd-upcoming-rows'); if (!tbody) return;
+
+  if (out.reason && !out.rows.length) {
+    tbody.innerHTML = `<tr><td colspan="4">${escapeHtml(out.reason)}</td></tr>`;
+    return;
   }
-  async function renderHistory(){
-    const out = await fetchHistory({ email: client.email, phone: client.phone });
-    const tbody = document.getElementById('cd-history-rows'); if (!tbody) return;
-    if (!out.rows.length) {
-      tbody.innerHTML = `<tr><td colspan="3">${escapeHtml(out.reason || 'Brak historii')}</td></tr>`;
-      return;
-    }
-    tbody.innerHTML = out.rows.map(it => `
-      <tr>
-        <td>${fmtDatePL(it.when)}</td>
-        <td>${escapeHtml(it.service_name||'-')}</td>
-        <td>${escapeHtml(it.status||'-')}</td>
-      </tr>
-    `).join('');
+
+  const now = new Date();
+  const rows = out.rows.filter(r => new Date(r.when) >= now && r.status !== 'Anulowana');
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="4">Brak nadchodzących</td></tr>`;
+    return;
   }
+
+  tbody.innerHTML = rows.map(it => `
+    <tr>
+      <td>${fmtDatePL(it.when)}</td>
+      <td>${escapeHtml(it.service_name || '-')}</td>
+      <td>${escapeHtml(it.status || '-')}</td>
+      <td>${escapeHtml(noteFor(it) || '-')}</td>
+    </tr>
+  `).join('');
+}
+
+async function renderHistory(){
+  const out = await fetchClientBookings({ email: client.email, phone: client.phone });
+  const tbody = document.getElementById('cd-history-rows'); if (!tbody) return;
+
+  if (out.reason && !out.rows.length) {
+    tbody.innerHTML = `<tr><td colspan="3">${escapeHtml(out.reason)}</td></tr>`;
+    return;
+  }
+
+  const now = new Date();
+  const rows = out.rows.filter(r => new Date(r.when) < now && r.status !== 'Anulowana')
+                       .sort((a,b) => new Date(b.when) - new Date(a.when));
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="3">Brak historii</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rows.map(it => `
+    <tr>
+      <td>${fmtDatePL(it.when)}</td>
+      <td>${escapeHtml(it.service_name || '-')}</td>
+      <td>${escapeHtml(it.status || '-')}</td>
+    </tr>
+  `).join('');
+}
+
 
   // ===== NOTES (lokalne) =====
   function loadNotesToForm(){
