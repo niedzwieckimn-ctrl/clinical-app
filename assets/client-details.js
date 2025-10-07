@@ -308,10 +308,44 @@ async function renderSuggestions(){
   const out = await fetchClientBookings({ email: client.email, phone: client.phone });
   const stats = analyzeHistory(out.rows || []);
   const next  = stats.upcoming[0] || null;
+  const planTextHTML = buildPlanNarrative(client, stats, next, out.rows || []);
+
 const planTextHTML = buildPlanNarrative(client, stats, next, out.rows || []);
 
 
   const narrative = buildNarrativeHTML(client, stats, out.rows || []);
+// === UWAGI KLIENTA / TERAPEUTKI – wykrywanie i cytaty ===
+function normAll(s){
+  const t = String(s || '').toLowerCase();
+  // zdejmij polskie znaki, by działały warianty bez ogonków
+  try { return t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch { return t; }
+}
+
+function latestClientNote(next, rows){
+  if (next?.notes && String(next.notes).trim()) return String(next.notes).trim();
+  const r = (rows || [])
+    .filter(x => x?.notes && String(x.notes).trim())
+    .sort((a,b) => new Date(b.when) - new Date(a.when))[0];
+  return r?.notes ? String(r.notes).trim() : '';
+}
+
+function latestTherapistNote(client){
+  const arr = Object.entries(client.treatmentNotes || {})
+    .map(([k,v]) => ({ when: (k||'').split('|')[0] || null, text: String(v||'').trim() }))
+    .filter(x => x.text);
+  arr.sort((a,b) => new Date(b.when||0) - new Date(a.when||0));
+  return arr[0]?.text || '';
+}
+
+function extractWishes(text){
+  const s = normAll(text);
+  return {
+    lessChoco: /mniej.*czekolad|zapach.*delikatniejs|za mocn.*czekolad/.test(s),
+    warmerOil: /ciepl(ejsz|iejsz)y.*olej|olej.*za zimn|olej.*ciepl/.test(s),
+    longTowel: /dluzszy.*recznik|dlugi.*recznik|dluz(y|a).*r(e|ę)cznik/.test(s),
+    pets: /odi|pies|kot|zwierzak|zwierze/.test(s),
+  };
+}
 // === PLAN JAKO NARRACJA (ciągły tekst) ===
 function buildPlanNarrative(client, stats, next, rows){
   const whenTxt = next ? fmtDatePL(next.when) : '—';
@@ -321,13 +355,22 @@ function buildPlanNarrative(client, stats, next, rows){
   const allNotes = gatherAllNotes(rows, next, client).toLowerCase();
   const ctx = extractContextFromNotes(allNotes);
 
-  // preferencje / bezpieczeństwo / „smaczki” z uwag
-  const likesHeat  = has(client.prefs, 'ciepł','gorąc') || /(ciepł|gorąc)/.test(allNotes);
-  const prefStrong = has(client.prefs, 'mocn','głęb')    || /(mocn|głęb)/.test(allNotes);
-  const avoidCoco  = has(client.allergies, 'kokos')      || /\bkokos\b/.test(allNotes);
-  const lessChoco  = /(mniej .*czekolad|mniej arom)/.test(allNotes);
-  const warmerOil  = /(cieplejszy olejek|olejek cieplejszy|bardziej ciepły)/.test(allNotes);
-  const longTowel  = /(dłuższy ręcznik|dluzszy recznik)/.test(allNotes);
+  // preferencje / bezpieczeństwo / życzenia z notatek
+const likesHeat  = has(client.prefs, 'ciepł','gorąc') || /ciep(ł|l)|gor(ą|a)co/.test(allNotes);
+const prefStrong = has(client.prefs, 'mocn','głęb') || /(mocn|g(ł|l)eb)/i.test(allNotes);
+const avoidCoco  = has(client.allergies, 'kokos') || /\bkokos\b/i.test(allNotes);
+const wishes   = extractWishes(allNotes);
+const lessChoco = wishes.lessChoco;
+const warmerOil = wishes.warmerOil;
+const longTowel = wishes.longTowel;
+const petsAround = wishes.pets || !!ctx.pets;
+// życzenia klienta – robust
+const wishes   = extractWishes(allNotes);
+const lessChoco = wishes.lessChoco;
+const warmerOil = wishes.warmerOil;
+const longTowel = wishes.longTowel;
+const petsAround = wishes.pets || !!ctx.pets;
+
 
   // obszary pracy wywnioskowane z notatek/kontekstu
   const shoulder = /(bark|barki|łopatk|obręcz)/.test(allNotes) || ctx.work === 'manual';
@@ -336,6 +379,8 @@ function buildPlanNarrative(client, stats, next, rows){
 
   // akapity
   const parts = [];
+const lastClientQuote = latestClientNote(next, rows);
+const lastTherQuote   = latestTherapistNote(client);
 
   // wprowadzenie / przygotowanie
   const prep = [];
@@ -377,6 +422,8 @@ function buildPlanNarrative(client, stats, next, rows){
       + `striping oraz poprzeczne frikcje zginaczy, a następnie łagodne trakcje i ślizgi promieniowo-łokciowe o małej amplitudzie.`
     );
   }
+if (lastClientQuote) { parts.push(`Z ostatnich uwag klienta: „${escapeHtml(clip(lastClientQuote, 160))}”.`); }
+if (SG_DETAILED && lastTherQuote) { parts.push(`Ostatnie spostrzeżenie terapeutki: „${escapeHtml(clip(lastTherQuote, 160))}”.`); }
 
   // sterowanie naciskiem + komunikacja
   const comms = [];
