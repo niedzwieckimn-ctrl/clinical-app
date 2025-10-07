@@ -98,7 +98,7 @@
     const p = normPhone(phone);
 
     let q = window.sb.from('bookings_view')
-      .select('when, service_name, status')
+      .select('when, service_name, status, notes')
       .lt('when', nowIso)
       .neq('status','Anulowana')
       .order('when', { ascending: false });
@@ -119,18 +119,20 @@
   async function renderUpcoming(){
     const out = await fetchUpcoming({ email: client.email, phone: client.phone });
     const tbody = document.getElementById('cd-upcoming-rows'); if (!tbody) return;
-    if (!out.rows.length) {
-      tbody.innerHTML = `<tr><td colspan="3">${escapeHtml(out.reason || 'Brak nadchodzących')}</td></tr>`;
-      return;
-    }
-    tbody.innerHTML = out.rows.map(it => `
-      <tr>
-        <td>${fmtDatePL(it.when)}</td>
-        <td>${escapeHtml(it.service_name||'-')}</td>
-        <td>${escapeHtml(it.status||'-')}</td>
-      </tr>
-    `).join('');
-  }
+   
+ if (!out.rows.length) {
+   tbody.innerHTML = `<tr><td colspan="4">${escapeHtml(out.reason || 'Brak nadchodzących')}</td></tr>`;
+   return;
+ }
+ tbody.innerHTML = out.rows.map(it => `
+   <tr>
+     <td>${fmtDatePL(it.when)}</td>
+     <td>${escapeHtml(it.service_name||'-')}</td>
+     <td>${escapeHtml(it.status||'-')}</td>
+     <td>${escapeHtml(it.notes||'-')}</td>
+   </tr>
+ `).join('');
+
 
   async function renderHistory(){
     const out = await fetchHistory({ email: client.email, phone: client.phone });
@@ -169,10 +171,8 @@
   }
 
   // ===== BUTTONS =====
-  $('#cd-btn-suggestions')?.addEventListener('click', () => {
-    $('#cd-section-suggestions').innerHTML = buildSuggestions(client);
-    showSection('cd-section-suggestions');
-  });
+  renderUpcoming().then(() => showSection('cd-section-upcoming'));
+
 
   $('#cd-btn-upcoming')?.addEventListener('click', async () => {
     await renderUpcoming();
