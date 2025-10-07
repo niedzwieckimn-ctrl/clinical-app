@@ -2,13 +2,22 @@
 (function () {
   'use strict';
 
-  // ---- UTIL ----
+  // ===== UTIL =====
   const $ = (s, r=document) => r.querySelector(s);
-  const escapeHtml = (s) => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const fmtDatePL = (iso)=>{ try { return new Date(iso).toLocaleDateString('pl-PL', { dateStyle:'medium' }); } catch { return iso||''; } };
+  const escapeHtml = (s) => String(s||'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const fmtDatePL = (iso) => {
+    try { return new Date(iso).toLocaleDateString('pl-PL', { dateStyle:'medium' }); }
+    catch { return iso || ''; }
+  };
   const qs = new URLSearchParams(location.search);
-  const CLIENTS_LS_KEY = 'adm_clients_v1';
 
+  // Normalizacja identyfikatorów
+  function normEmail(e){ return String(e||'').trim().toLowerCase(); }
+  function normPhone(p){ return String(p||'').replace(/[^\d+]/g,''); }
+
+  // ===== LOCAL STORAGE =====
+  const CLIENTS_LS_KEY = 'adm_clients_v1';
   function clientsLoad(){
     try { return JSON.parse(localStorage.getItem(CLIENTS_LS_KEY)) || []; }
     catch { return []; }
@@ -17,29 +26,34 @@
     localStorage.setItem(CLIENTS_LS_KEY, JSON.stringify(list || []));
   }
 
+  // ===== SECTIONS =====
   function showSection(id){
-    ['cd-section-suggestions','cd-section-upcoming','cd-section-history','cd-section-contact','cd-section-notes']
-      .forEach(x => document.getElementById(x)?.classList.add('hidden'));
+    const ids = [
+      'cd-section-suggestions',
+      'cd-section-upcoming',
+      'cd-section-history',
+      'cd-section-contact',
+      'cd-section-notes'
+    ];
+    ids.forEach(x => document.getElementById(x)?.classList.add('hidden'));
     document.getElementById(id)?.classList.remove('hidden');
   }
-function normEmail(e){ return String(e||'').trim().toLowerCase(); }
-function normPhone(p){ return String(p||'').replace(/[^\d+]/g,''); }
 
-  // ---- DATA ----
+  // ===== LOAD CLIENT =====
   const id = qs.get('id');
   let client = clientsLoad().find(x => x.id === id);
   if (!client) {
-    document.body.innerHTML = '<div class="container"><p>Nie znaleziono klienta.</p><p><a href="admin.html">Wróć</a></p></div>';
+    document.body.innerHTML = '<div class="container"><p>Nie znaleziono klienta.</p><p><a href="admin.html#clients">Wróć</a></p></div>';
     return;
   }
 
-  // ---- START ----
+  // Header + kontakt na starcie
   $('#cd-title').textContent = client.name || 'Szczegóły klienta';
   $('#cd-email').textContent = client.email || '-';
   $('#cd-phone').textContent = client.phone || '-';
   $('#cd-address').textContent = client.address || '-';
 
-  // Sugestie
+  // ===== SUGESTIE =====
   function buildSuggestions(c){
     const out = [];
     const txt = (s)=>String(s||'').toLowerCase();
@@ -52,79 +66,89 @@ function normPhone(p){ return String(p||'').replace(/[^\d+]/g,''); }
   $('#cd-section-suggestions').innerHTML = buildSuggestions(client);
   showSection('cd-section-suggestions');
 
-  // Nadchodzące / Historia (Supabase)
-async function fetchUpcoming({ email, phone }){
-  const nowIso = new Date().toISOString();
-  const e = normEmail(email);
-  const p = normPhone(phone);
+  // ===== SUPABASE QUERIES =====
+  // Nadchodzące (>= now, != Anulowana), dopasuj po email (ILIKE) lub phone (eq)
+  async function fetchUpcoming({ email, phone }){
+    const nowIso = new Date().toISOString();
+    const e = normEmail(email);
+    const p = normPhone(phone);
 
-  let q = window.sb.from('bookings_view')
-    .select('when, service_name, status')
-    .gte('when', nowIso)
-    .neq('status','Anulowana')
-    .order('when', { ascending: true });
+    let q = window.sb.from('bookings_view')
+      .select('when, service_name, status')
+      .gte('when', nowIso)
+      .neq('status','Anulowana')
+      .order('when', { ascending: true });
 
-  if (e && p) {
-    // dopasuj po e-mail (case-insensitive) LUB po telefonie
-    q = q.or(`client_email.ilike.${e},phone.eq.${p}`);
-  } else if (e) {
-    q = q.ilike('client_email', e);
-  } else if (p) {
-    q = q.eq('phone', p);
-  } else {
-    return []; // brak identyfikatorów – nic nie zwrócimy
+    if (!e && !p) return { rows: [], reason: 'Brak e-maila/telefonu u klienta' };
+
+    const parts = [];
+    if (e) parts.push(`client_email.ilike.${e}`);
+    if (p) parts.push(`phone.eq.${p}`);
+    q = q.or(parts.join(','));
+
+    const { data, error } = await q;
+    if (error) { console.warn('[upcoming] supabase:', error); return { rows: [], reason: error.message }; }
+    return { rows: data || [], reason: null };
   }
 
-  const { data, error } = await q;
-  if (error) { console.warn('upcoming error', error); return []; }
-  return data || [];
-}
-
-
+  // Historia (< now, != Anulowana), dopasuj po email (ILIKE) lub phone (eq)
   async function fetchHistory({ email, phone }){
-  const nowIso = new Date().toISOString();
-  const e = normEmail(email);
-  const p = normPhone(phone);
+    const nowIso = new Date().toISOString();
+    const e = normEmail(email);
+    const p = normPhone(phone);
 
-  let q = window.sb.from('bookings_view')
-    .select('when, service_name, status')
-    .lt('when', nowIso)                 // tylko przeszłe
-    .neq('status','Anulowana')          // nie pokazuj anulowanych
-    .order('when', { ascending: false });
+    let q = window.sb.from('bookings_view')
+      .select('when, service_name, status')
+      .lt('when', nowIso)
+      .neq('status','Anulowana')
+      .order('when', { ascending: false });
 
-  if (e && p) {
-    q = q.or(`client_email.ilike.${e},phone.eq.${p}`);
-  } else if (e) {
-    q = q.ilike('client_email', e);
-  } else if (p) {
-    q = q.eq('phone', p);
-  } else {
-    return [];
+    if (!e && !p) return { rows: [], reason: 'Brak e-maila/telefonu u klienta' };
+
+    const parts = [];
+    if (e) parts.push(`client_email.ilike.${e}`);
+    if (p) parts.push(`phone.eq.${p}`);
+    q = q.or(parts.join(','));
+
+    const { data, error } = await q;
+    if (error) { console.warn('[history] supabase:', error); return { rows: [], reason: error.message }; }
+    return { rows: data || [], reason: null };
   }
 
-  const { data, error } = await q;
-  if (error) { console.warn('history error', error); return []; }
-  return data || [];
-}
-
-
+  // ===== RENDERERS =====
   async function renderUpcoming(){
-    const rows = await fetchUpcoming({ email: client.email, phone: client.phone });
-    const tbody = $('#cd-upcoming-rows');
-    tbody.innerHTML = rows.map(it => `
-      <tr><td>${fmtDatePL(it.when)}</td><td>${escapeHtml(it.service_name||'-')}</td><td>${escapeHtml(it.status||'-')}</td></tr>
-    `).join('') || '<tr><td colspan="3">Brak nadchodzących</td></tr>';
+    const out = await fetchUpcoming({ email: client.email, phone: client.phone });
+    const tbody = document.getElementById('cd-upcoming-rows'); if (!tbody) return;
+    if (!out.rows.length) {
+      tbody.innerHTML = `<tr><td colspan="3">${escapeHtml(out.reason || 'Brak nadchodzących')}</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = out.rows.map(it => `
+      <tr>
+        <td>${fmtDatePL(it.when)}</td>
+        <td>${escapeHtml(it.service_name||'-')}</td>
+        <td>${escapeHtml(it.status||'-')}</td>
+      </tr>
+    `).join('');
   }
 
   async function renderHistory(){
-    const rows = await fetchHistory({ email: client.email, phone: client.phone });
-    const tbody = $('#cd-history-rows');
-    tbody.innerHTML = rows.map(it => `
-      <tr><td>${fmtDatePL(it.when)}</td><td>${escapeHtml(it.service_name||'-')}</td><td>${escapeHtml(it.status||'-')}</td></tr>
-    `).join('') || '<tr><td colspan="3">Brak historii</td></tr>';
+    const out = await fetchHistory({ email: client.email, phone: client.phone });
+    const tbody = document.getElementById('cd-history-rows'); if (!tbody) return;
+    if (!out.rows.length) {
+      tbody.innerHTML = `<tr><td colspan="3">${escapeHtml(out.reason || 'Brak historii')}</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = out.rows.map(it => `
+      <tr>
+        <td>${fmtDatePL(it.when)}</td>
+        <td>${escapeHtml(it.service_name||'-')}</td>
+        <td>${escapeHtml(it.status||'-')}</td>
+      </tr>
+    `).join('');
   }
 
-  // Notatki/ustawienia (lokalne)
+  // ===== NOTES (lokalne) =====
   function loadNotesToForm(){
     $('#cd-prefs').value      = client.prefs || '';
     $('#cd-allergies').value  = client.allergies || '';
@@ -140,11 +164,11 @@ async function fetchUpcoming({ email, phone }){
     list[idx].contras   = $('#cd-contras')?.value || '';
     list[idx].notes     = $('#cd-notes')?.value || '';
     clientsSave(list);
-    client = list[idx];
+    client = list[idx]; // odśwież referencję
     alert('Zapisano.');
   }
 
-  // ---- Łączenia przycisków ----
+  // ===== BUTTONS =====
   $('#cd-btn-suggestions')?.addEventListener('click', () => {
     $('#cd-section-suggestions').innerHTML = buildSuggestions(client);
     showSection('cd-section-suggestions');
@@ -161,7 +185,6 @@ async function fetchUpcoming({ email, phone }){
   });
 
   $('#cd-btn-contact')?.addEventListener('click', () => {
-    // dane kontaktowe wypełnione już na starcie
     showSection('cd-section-contact');
   });
 
@@ -173,7 +196,7 @@ async function fetchUpcoming({ email, phone }){
   $('#cd-save')?.addEventListener('click', saveNotesFromForm);
 
   $('#cd-btn-back')?.addEventListener('click', () => {
-    // spróbuj zamknąć kartę; jeśli nie można, wróć do admin
+    // spróbuj zamknąć; jeśli przeglądarka blokuje, wróć do admin
     window.close();
     setTimeout(() => { location.href = 'admin.html#clients'; }, 200);
   });
