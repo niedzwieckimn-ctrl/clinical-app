@@ -423,6 +423,7 @@ box.innerHTML = `
     </div>
   </div>
 `;
+wirePromptButton();
 
 
   const saveBlock = (title, text) => {
@@ -543,6 +544,9 @@ async function renderUpcoming(){
       <td>${escapeHtml(noteFor(it) || '-')}</td>
     </tr>
   `).join('');
+  // zapamiętaj najbliższy zabieg do promptu
+window.__cd_upcoming = out?.rows?.[0] || null;
+
 }
 
 async function renderHistory(){
