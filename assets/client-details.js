@@ -545,7 +545,8 @@ async function renderUpcoming(){
     </tr>
   `).join('');
   // zapamiętaj najbliższy zabieg do promptu
-window.__cd_upcoming = out?.rows?.[0] || null;
+window.__cd_upcoming = pickUpcomingService(out);
+
 
 }
 
@@ -691,12 +692,33 @@ const AI_SERVICES = [
   'Masaż rosyjski miodem — 150.00 zł',
   'Terapia SPA — 250.00 zł',
 ];
+function pickUpcomingService(out){
+  const rows = out?.rows || [];
+  if (!rows.length) return null;
+  const now = new Date();
+  const future = rows
+    .filter(r => new Date(r.when) >= now)
+    .sort((a,b) => new Date(a.when) - new Date(b.when));
+  return future[0] || rows[0] || null; // fallback: najnowszy, jeśli brak przyszłych
+}
 
 // Skrót notatek relacyjnych (delikatne 0–2 wtrącenia)
 function buildLifeNotesShort(c) {
   const s = (c?.notes || '').replace(/\s+/g, ' ').trim();
   if (!s) return '';
   return s.length > 140 ? s.slice(0, 140) + '…' : s;
+}
+function deriveThreads(notes){
+  // Weź 1–2 „bezpieczne” aluzje z wolnego tekstu (np. pies, projekt, muzyka, wstydliwość)
+  const src = (notes || '').replace(/\s+/g,' ').trim();
+  if (!src) return '';
+  // rozbij po kropce/średniku
+  let parts = src.split(/[.;]\s*/).filter(Boolean);
+  // preferuj słowa-klucze
+  const prefer = parts.filter(p => /(pies|wesele|projekt|muzyk|wstydliw|praca|stres|dziewczyn|podróż|rodzin|szkoł|egzamin)/i.test(p));
+  const uniq = (arr) => [...new Set(arr)];
+  parts = uniq(prefer.concat(parts));
+  return parts.slice(0,2).join('; ');
 }
 
 // Podsumowanie historii (liczba wizyt, top usługa, ostatnia wizyta, średni odstęp)
@@ -725,30 +747,36 @@ function summarizeHistory(hist) {
 
 // Złożenie promptu do ChatGPT (jeden akapit, porada dla masażystki)
 function buildAIPromptForClient({ client, upcoming, history }) {
-  const { visits_count, last_visit, top_service, avg_interval } = summarizeHistory(history);
-  const whenTxt = upcoming?.when ? fmtDatePL(upcoming.when) : 'brak daty';
-  const current_service = upcoming?.service_name || 'brak zaplanowanego zabiegu';
-  const client_note = (upcoming?.notes ||
-    (history?.rows || []).slice().reverse().find(r => r.notes)?.notes || '') || '';
-  const therapist_note = ''; // tu możesz podstawić lokalne notatki p. zabiegowe, jeśli trzymasz
-  const prefs = client?.prefs || '';
-  const allergies = client?.allergies || '';
-  const cautions = client?.contras || '';
-  const context = client?.context || ''; // jeśli nie masz pola „context”, zostaw puste — nie szkodzi
-  const life_notes_short = buildLifeNotesShort(client);
-  const servicesLine = AI_SERVICES.join(' • ');
+const upc = window.__cd_upcoming || null;
+const whenTxt = upc?.when ? fmtDatePL(upc.when) : 'brak daty';
+const current_service = upc?.service_name || 'brak zaplanowanego zabiegu';
+
+const client_note = (upc?.notes ||
+  (history?.rows || []).slice().reverse().find(r => r.notes)?.notes || '') || '';
+
+const prefs = client?.prefs || '';
+const allergies = client?.allergies || '';
+const cautions = client?.contras || '';
+const context = client?.context?.trim() || deriveContextFromNotes(client?.notes || '');
+const signals = client?.signals?.trim() || deriveSignalsFromNotes((client?.notes || '') + ' ' + (upc?.notes || ''));
+const life_notes_short = buildLifeNotesShort(client);
+const threads = deriveThreads(client?.notes || '');
+
 
   return [
-    'Piszesz do masażystki wykonującej zabieg na kliencie (nie do klienta). Udziel jednego, płynnego akapitu (180–220 słów) z poradą: na czym się skupić, jaką przyjąć intensywność (zakres odczuć bólu), czego nie robić/nie stosować oraz krótką auto-opiekę po. Bez list i nagłówków, lekko technicznie, bez diagnoz. Jeśli pojawi się ostry/promieniujący ból, drętwienie lub zawroty — napisz, by zmniejszyć intensywność lub przerwać. Na końcu zarekomenduj 1 najlepszy masaż na kolejną wizytę wyłącznie z poniższej listy, z krótkim powodem, sugerowanym czasem i intensywnością.',
-    `Dostępne zabiegi (wybierz dokładnie jeden, użyj nazwy jak poniżej): ${servicesLine}.`,
-    `Dzisiejszy zabieg: ${current_service} • ${whenTxt}.`,
-    `Preferencje: ${prefs || '—'}. Alergie/ostrożności: ${allergies || '—'}${cautions ? ' / ' + cautions : ''}.`,
-    `Kontekst życia/pracy: ${context || '—'}.`,
-    `Główne dolegliwości: ${client?.signals || '—'}.`,
-    `Uwagi klienta: "${client_note || '—'}". Notatka terapeutki: "${therapist_note || '—'}".`,
-    `Historia: wizyt ${visits_count || 0}, zwykle ${top_service || '—'}, ostatnio ${last_visit ? fmtDatePL(last_visit) : '—'}, odstęp ~${avg_interval || '—'} dni.`,
-    life_notes_short ? `Notatki relacyjne (do taktownych aluzji, max 1–2): ${life_notes_short}.` : ''
-  ].filter(Boolean).join('\n');
+  'Piszesz do masażystki wykonującej zabieg na kliencie (nie do klienta). Udziel jednego, płynnego akapitu (180–220 słów) z poradą: na czym się skupić, jaką przyjąć intensywność (zakres odczuć bólu), czego nie robić/nie stosować oraz krótką auto-opiekę po. Bez list i nagłówków, lekko technicznie, bez diagnoz. Jeśli pojawi się ostry/promieniujący ból, drętwienie lub zawroty — napisz, by zmniejszyć intensywność lub przerwać. Na końcu zarekomenduj 1 najlepszy masaż na kolejną wizytę wyłącznie z poniższej listy, z krótkim powodem, sugerowanym czasem i intensywnością.',
+  `Dostępne zabiegi (wybierz dokładnie jeden, użyj nazwy jak poniżej): ${servicesLine}.`,
+  // >>> KLUCZOWE DOPISKI <<<
+  `Dzisiejszy zabieg (oprzyj poradę właśnie o ten typ): ${current_service} • ${whenTxt}.`,
+  threads ? `Wpleć taktownie 1–2 aluzje relacyjne (dla zbudowania więzi): ${threads}.` : '',
+  // --- reszta jak była ---
+  `Preferencje: ${prefs || '—'}. Alergie/ostrożności: ${allergies || '—'}${cautions ? ' / ' + cautions : ''}.`,
+  `Kontekst życia/pracy: ${context || '—'}.`,
+  `Główne dolegliwości: ${signals || '—'}.`,
+  `Uwagi klienta: "${client_note || '—'}". Notatka terapeutki: "—".`,
+  `Historia: wizyt ${visits_count || 0}, zwykle ${top_service || '—'}, ostatnio ${last_visit ? fmtDatePL(last_visit) : '—'}, odstęp ~${avg_interval || '—'} dni.`
+].filter(Boolean).join('\n');
+
 }
 
 // Podpięcie przycisku: kopiuj prompt + otwórz ChatGPT
