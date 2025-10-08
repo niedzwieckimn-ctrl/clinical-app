@@ -563,13 +563,13 @@ async function renderHistory(){
   const rows = out.rows
     .filter(r => new Date(r.when) < now && r.status !== 'Anulowana')
     .sort((a,b) => new Date(b.when) - new Date(a.when));
+// zapamiętaj historię do promptu
+window.__cd_history = out || { rows: [] };
 
   if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="4">Brak historii</td></tr>`;
     return;
-	// zapamiętaj historię do promptu
-window.__cd_history = out || { rows: [] };
-
+	
   }
 
   // klucz notatki: preferuj booking_no; fallback: when|service
@@ -747,6 +747,13 @@ function summarizeHistory(hist) {
 
 // Złożenie promptu do ChatGPT (jeden akapit, porada dla masażystki)
 function buildAIPromptForClient({ client, upcoming, history }) {
+  // ➊ POLICZ statystyki historii (te zmienne są później używane w tekście)
+  const { visits_count, last_visit, top_service, avg_interval } =
+    summarizeHistory(history);
+
+  // ➋ ZŁÓŻ linię z dozwolonymi usługami (servicesLine używasz niżej)
+  const servicesLine = (AI_SERVICES || []).join(' • ');
+
 const upc = window.__cd_upcoming || null;
 const whenTxt = upc?.when ? fmtDatePL(upc.when) : 'brak daty';
 const current_service = upc?.service_name || 'brak zaplanowanego zabiegu';
@@ -778,6 +785,22 @@ const threads = deriveThreads(client?.notes || '');
 ].filter(Boolean).join('\n');
 
 }
+async function copyToClipboard(text){
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  }
+}
 
 // Podpięcie przycisku: kopiuj prompt + otwórz ChatGPT
 function wirePromptButton() {
@@ -792,9 +815,11 @@ function wirePromptButton() {
         upcoming: window.__cd_upcoming || null,
         history: window.__cd_history || { rows: [] }
       });
-      await navigator.clipboard.writeText(prompt);
-      alert('✅ Skopiowano prompt. Otwieram ChatGPT — wklej i wyślij.');
-      window.open('https://chat.openai.com/', '_blank');
+    const ok = await copyToClipboard(prompt);
+if (!ok) throw new Error('Clipboard copy failed');
+alert('✅ Skopiowano prompt. Otwieram ChatGPT — wklej i wyślij.');
+window.open('https://chat.openai.com/', '_blank');
+
     } catch (err) {
       console.error('prompt copy error', err);
       alert('Nie udało się skopiować promptu. Sprawdź uprawnienia do schowka.');
