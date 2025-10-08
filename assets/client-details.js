@@ -409,6 +409,8 @@ box.innerHTML = `
     <div style="margin-top:8px">
       <button id="sg-save-plan" class="btn">Zapisz plan do Notatek</button>
       <button id="sg-copy-plan" class="btn">Kopiuj plan</button>
+	  <button class="btn" id="cd-prompt-btn">Prompt (AI)</button>
+
     </div>
   </div>
 
@@ -421,6 +423,7 @@ box.innerHTML = `
     </div>
   </div>
 `;
+wirePromptButton();
 
 
   const saveBlock = (title, text) => {
@@ -541,6 +544,9 @@ async function renderUpcoming(){
       <td>${escapeHtml(noteFor(it) || '-')}</td>
     </tr>
   `).join('');
+  // zapamiętaj najbliższy zabieg do promptu
+window.__cd_upcoming = out?.rows?.[0] || null;
+
 }
 
 async function renderHistory(){
@@ -560,6 +566,9 @@ async function renderHistory(){
   if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="4">Brak historii</td></tr>`;
     return;
+	// zapamiętaj historię do promptu
+window.__cd_history = out || { rows: [] };
+
   }
 
   // klucz notatki: preferuj booking_no; fallback: when|service
@@ -673,5 +682,96 @@ document.getElementById('cd-history-rows')?.addEventListener('click', (e) => {
   await renderSuggestions();
   showSection('cd-section-suggestions');
 });
+// === AI PROMPT: konfiguracja listy usług (do rekomendacji) ===
+const AI_SERVICES = [
+  'Masaż bambusami — 200.00 zł',
+  'Masaż ciepłą czekoladą — 200.00 zł',
+  'Masaż królewski Lomi Lomi — 250.00 zł',
+  'Masaż relaksacyjny ciała — 150.00 zł',
+  'Masaż rosyjski miodem — 150.00 zł',
+  'Terapia SPA — 250.00 zł',
+];
+
+// Skrót notatek relacyjnych (delikatne 0–2 wtrącenia)
+function buildLifeNotesShort(c) {
+  const s = (c?.notes || '').replace(/\s+/g, ' ').trim();
+  if (!s) return '';
+  return s.length > 140 ? s.slice(0, 140) + '…' : s;
+}
+
+// Podsumowanie historii (liczba wizyt, top usługa, ostatnia wizyta, średni odstęp)
+function summarizeHistory(hist) {
+  const rows = hist?.rows || [];
+  const visits_count = rows.length;
+  let last_visit = null, top_service = null, avg_interval = null;
+
+  if (rows.length) {
+    const sorted = [...rows].sort((a, b) => new Date(a.when) - new Date(b.when));
+    last_visit = sorted[sorted.length - 1].when;
+
+    const counts = {};
+    for (const r of rows) if (r.service_name) counts[r.service_name] = (counts[r.service_name] || 0) + 1;
+    top_service = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+    const gaps = [];
+    for (let i = 1; i < sorted.length; i++) {
+      const d = (new Date(sorted[i].when) - new Date(sorted[i - 1].when)) / 86400000;
+      if (isFinite(d)) gaps.push(Math.round(d));
+    }
+    if (gaps.length) avg_interval = Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length);
+  }
+  return { visits_count, last_visit, top_service, avg_interval };
+}
+
+// Złożenie promptu do ChatGPT (jeden akapit, porada dla masażystki)
+function buildAIPromptForClient({ client, upcoming, history }) {
+  const { visits_count, last_visit, top_service, avg_interval } = summarizeHistory(history);
+  const whenTxt = upcoming?.when ? fmtDatePL(upcoming.when) : 'brak daty';
+  const current_service = upcoming?.service_name || 'brak zaplanowanego zabiegu';
+  const client_note = (upcoming?.notes ||
+    (history?.rows || []).slice().reverse().find(r => r.notes)?.notes || '') || '';
+  const therapist_note = ''; // tu możesz podstawić lokalne notatki p. zabiegowe, jeśli trzymasz
+  const prefs = client?.prefs || '';
+  const allergies = client?.allergies || '';
+  const cautions = client?.contras || '';
+  const context = client?.context || ''; // jeśli nie masz pola „context”, zostaw puste — nie szkodzi
+  const life_notes_short = buildLifeNotesShort(client);
+  const servicesLine = AI_SERVICES.join(' • ');
+
+  return [
+    'Piszesz do masażystki wykonującej zabieg na kliencie (nie do klienta). Udziel jednego, płynnego akapitu (180–220 słów) z poradą: na czym się skupić, jaką przyjąć intensywność (zakres odczuć bólu), czego nie robić/nie stosować oraz krótką auto-opiekę po. Bez list i nagłówków, lekko technicznie, bez diagnoz. Jeśli pojawi się ostry/promieniujący ból, drętwienie lub zawroty — napisz, by zmniejszyć intensywność lub przerwać. Na końcu zarekomenduj 1 najlepszy masaż na kolejną wizytę wyłącznie z poniższej listy, z krótkim powodem, sugerowanym czasem i intensywnością.',
+    `Dostępne zabiegi (wybierz dokładnie jeden, użyj nazwy jak poniżej): ${servicesLine}.`,
+    `Dzisiejszy zabieg: ${current_service} • ${whenTxt}.`,
+    `Preferencje: ${prefs || '—'}. Alergie/ostrożności: ${allergies || '—'}${cautions ? ' / ' + cautions : ''}.`,
+    `Kontekst życia/pracy: ${context || '—'}.`,
+    `Główne dolegliwości: ${client?.signals || '—'}.`,
+    `Uwagi klienta: "${client_note || '—'}". Notatka terapeutki: "${therapist_note || '—'}".`,
+    `Historia: wizyt ${visits_count || 0}, zwykle ${top_service || '—'}, ostatnio ${last_visit ? fmtDatePL(last_visit) : '—'}, odstęp ~${avg_interval || '—'} dni.`,
+    life_notes_short ? `Notatki relacyjne (do taktownych aluzji, max 1–2): ${life_notes_short}.` : ''
+  ].filter(Boolean).join('\n');
+}
+
+// Podpięcie przycisku: kopiuj prompt + otwórz ChatGPT
+function wirePromptButton() {
+  const btn = document.getElementById('cd-prompt-btn');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    try {
+      // UWAGA: zakładamy, że masz dostęp do obiektów 'client'
+      // oraz że w renderach zapiszesz najnowsze wyniki do window.__cd_upcoming / window.__cd_history (krok 3).
+      const prompt = buildAIPromptForClient({
+        client,
+        upcoming: window.__cd_upcoming || null,
+        history: window.__cd_history || { rows: [] }
+      });
+      await navigator.clipboard.writeText(prompt);
+      alert('✅ Skopiowano prompt. Otwieram ChatGPT — wklej i wyślij.');
+      window.open('https://chat.openai.com/', '_blank');
+    } catch (err) {
+      console.error('prompt copy error', err);
+      alert('Nie udało się skopiować promptu. Sprawdź uprawnienia do schowka.');
+    }
+  });
+}
 
 })();
