@@ -1,8 +1,3 @@
-diff --git a/admin.html b/admin.html
-index abfdce333a9e158ccf9807c4a0c655e3d8bb7b5d..56e46ddf2c3341e6094e522881666eaf441b52dd 100644
---- a/admin.html
-+++ b/admin.html
-@@ -1,32 +1,33 @@
  <!doctype html>
  <html lang="pl">
  <head>
@@ -10,7 +5,7 @@ index abfdce333a9e158ccf9807c4a0c655e3d8bb7b5d..56e46ddf2c3341e6094e522881666eaf
    <meta name="viewport" content="width=device-width,initial-scale=1" />
    <title>Admin — Rezerwacje</title>
    <link rel="stylesheet" href="assets/style.css" />
-+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
    <style>
      body { max-width: 920px; margin: 0 auto; padding: 16px; }
      .card { background: #fff; border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,.06); padding: 16px; }
@@ -62,16 +57,15 @@ index abfdce333a9e158ccf9807c4a0c655e3d8bb7b5d..56e46ddf2c3341e6094e522881666eaf
        </div>
      </div>
  
-+    <div class="card stack" id="calendar-card">
-+      <h2 style="margin:0">Kalendarz terminów</h2>
-+      <div id="calendar-status" class="calendar-status" aria-live="polite"></div>
-+      <div id="calendar-legend" class="calendar-legend">
-+        <span class="calendar-legend-item"><span class="legend-dot legend-dot-free"></span> Dni z wolnymi terminami (znacznik = najbliższa godzina)</span>
-+        <span class="calendar-legend-item"><span class="legend-dot legend-dot-full"></span> Dni całkowicie zajęte</span>
-+      </div>
-+      <div id="admin-calendar" class="calendar-widget" aria-label="Kalendarz rezerwacji"></div>
-+    </div>
-+
+    <div class="card stack" id="calendar-card">
+     <h2 style="margin:0">Kalendarz terminów</h2>
+      <div id="calendar-status" class="calendar-status" aria-live="polite"></div>
+      <div id="calendar-legend" class="calendar-legend">
+        <span class="calendar-legend-item"><span class="legend-dot legend-dot-free"></span> Dni z wolnymi terminami (znacznik = najbliższa godzina)</span>+        <span class="calendar-legend-item"><span class="legend-dot legend-dot-full"></span> Dni całkowicie zajęte</span>
+      </div>
+      <div id="admin-calendar" class="calendar-widget" aria-label="Kalendarz rezerwacji"></div>
+    </div>
+
      <div class="card">
        <table id="tbl">
          <thead>
@@ -92,8 +86,8 @@ index abfdce333a9e158ccf9807c4a0c655e3d8bb7b5d..56e46ddf2c3341e6094e522881666eaf
    </section>
  
    <script src="assets/supabase-client.js"></script>
-+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pl.js"></script>
    <script src="assets/admin.js"></script>
  </body>
  </html>
