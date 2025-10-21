@@ -1,147 +1,440 @@
-diff --git a/assets/style.css b/assets/style.css
-index b51dccedee29615bf6a2b78b5dc61bee166d995e..07af07d9f06d195ec310dbb4859ff52fef0c3d1b 100644
---- a/assets/style.css
-+++ b/assets/style.css
-@@ -176,61 +176,134 @@ tbody tr td:last-child {border-top-right-radius:10px;border-bottom-right-radius:
-   padding:16px 18px;text-align:center;z-index:9999;
-   box-shadow:0 10px 30px rgba(0,0,0,.12);
- }
- #bookingThanks .line1{font-size:1.05rem;font-weight:700;margin-bottom:4px}
- #bookingThanks .line2{font-size:.95rem;opacity:.95}
- 
- /* =======================
-    Modale
-    ======================= */
- .modal{
-   position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000
- }
- .modal .overlay{position:absolute;inset:0;background:rgba(0,0,0,.4)}
- .modal .content{
-   position:relative;background:#fff;border:1px solid var(--line);
-   border-radius:12px;padding:16px;max-width:640px;width:92%
- }
- 
- /* =======================
-    Kalendarz – highlighty
-    ======================= */
- .calendar .day.free{background:var(--brand-100);border:1px dashed var(--brand);color:var(--text)}
- .calendar .day.taken{background:#fff;border:1px solid var(--line);color:var(--muted)}
- .calendar .day.today{outline:2px solid var(--brand);outline-offset:-2px}
- 
--.flatpickr-day.free {
--  border: 2px solid var(--brand);
--  color: var(--brand);
--  font-weight: 500;
-+.calendar-legend {
-+  display: flex;
-+  flex-wrap: wrap;
-+  gap: 12px;
-+  font-size: 0.9rem;
-+  color: var(--muted, #555);
-+}
-+
-+.calendar-legend-item {
-+  display: flex;
-+  align-items: center;
-+  gap: 6px;
-+}
-+
-+.legend-dot {
-+  width: 12px;
-+  height: 12px;
-+  border-radius: 50%;
-+  display: inline-block;
-+  border: 1px solid rgba(0,0,0,0.08);
-+}
-+
-+.legend-dot-free {
-+  background: color-mix(in oklab, var(--success, #16a34a) 20%, white);
-+  border-color: color-mix(in oklab, var(--success, #16a34a) 40%, white);
-+}
-+
-+.legend-dot-full {
-+  background: color-mix(in oklab, var(--danger, #dc2626) 20%, white);
-+  border-color: color-mix(in oklab, var(--danger, #dc2626) 40%, white);
-+}
-+
-+.calendar-status {
-+  font-size: 0.85rem;
-+  color: var(--muted, #666);
-+  min-height: 1.2em;
-+}
-+
-+.calendar-status.error {
-+  color: var(--danger, #dc2626);
-+}
-+
-+#admin-calendar .flatpickr-calendar,
-+.calendar-widget .flatpickr-calendar {
-+  width: 100%;
-+}
-+
-+.flatpickr-calendar .dayContainer .flatpickr-day {
-+  position: relative;
-+}
-+
-+.flatpickr-day .calendar-mini {
-+  position: absolute;
-+  bottom: 3px;
-+  left: 50%;
-+  transform: translateX(-50%);
-+  font-size: 10px;
-+  font-weight: 600;
-+  pointer-events: none;
-+}
-+
-+.flatpickr-day.calendar-day-free {
-+  background: color-mix(in oklab, var(--success, #16a34a) 18%, white);
-+  border-color: color-mix(in oklab, var(--success, #16a34a) 45%, white);
-+  color: color-mix(in oklab, var(--success, #16a34a) 85%, black);
-+}
-+
-+.flatpickr-day.calendar-day-free .calendar-mini {
-+  color: color-mix(in oklab, var(--success, #16a34a) 80%, black);
-+}
-+
-+.flatpickr-day.calendar-day-full {
-+  background: color-mix(in oklab, var(--danger, #dc2626) 14%, white);
-+  border-color: color-mix(in oklab, var(--danger, #dc2626) 45%, white);
-+  color: color-mix(in oklab, var(--danger, #dc2626) 80%, black);
- }
- 
-+.flatpickr-day.calendar-day-full .calendar-mini {
-+  color: color-mix(in oklab, var(--danger, #dc2626) 80%, black);
-+}
- 
--.flatpickr-day:hover {
--  border-color: var(--brand);
--  background: rgba(160, 120, 40, 0.1);
--  color: var(--brand);
-+.flatpickr-day.calendar-day-free:hover,
-+.flatpickr-day.calendar-day-full:hover {
-+  filter: brightness(0.97);
- }
- 
- /* =======================
-    Responsywność
-    ======================= */
- @media (max-width:200px){
-   .container{padding:12px}
-   .listItem{flex-direction:column;align-items:flex-start;gap:6px}
-   .btn{padding:10px 12px}
- }
- /* ================================
-    Formularze – spójna kolorystyka
-    ================================ */
- 
- /* Wygląd podstawowy pól */
- input,
- select,
- textarea {
-   background: #fff;                  /* białe tło */
-   border: 1px solid #DBDBDB;         /* delikatna ramka */
-   border-radius: 6px;                /* lekko zaokrąglone */
-   padding: 10px;
-   font-size: 16px;
-   color: #333;                       /* tekst ciemny */
-   width: 100%;
+/* =======================
+   Paleta kolorów (zmienne)
+   ======================= */
+:root{
+  --bg:#ffffff;
+  --text:#111111;
+  --muted:#666666;
+  --card:#fafafa;
+  --line:#e5e5e5;
+
+  --brand:#8B6B32;      /* złoto-brązowy akcent */
+  --brand-600:#6d5126;  /* hover/active */
+  --brand-100:#f6f0e5;  /* delikatne tła/oznaczenia */
+
+  --danger:#dc2626;
+  --success:#16a34a;
+  --warning:#d97706;
+
+  --focus:#DBDBDB;      /* szare podświetlenie focus */
+}
+
+/* =======================
+   Reset / bazowe
+   ======================= */
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font:16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+a{color:var(--brand);text-decoration:none}
+a:hover{text-decoration:underline}
+hr{border:none;border-top:1px solid var(--line);margin:16px 0}
+
+/* =======================
+   Layout / kontenery / karty
+   ======================= */
+.container{max-width:1080px;margin:0 auto;padding:16px}
+.card{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:16px;
+}
+.inline{display:flex;gap:8px;align-items:center}
+.grid{display:grid;gap:12px}
+.notice{
+  padding:12px 14px;
+  background:var(--brand-100);
+  border:1px solid var(--line);
+  border-radius:10px;
+  color:var(--text);
+}
+
+/* =======================
+   Nagłówek / logo
+   ======================= */
+.header{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  padding:24px 0;
+  border-bottom:1px solid var(--line);
+  background:var(--bg);
+}
+
+/* logo skalowane rozsądnie, bez rozwalania układu */
+.logo{
+  display:block;
+  margin:16px auto;
+  height:clamp(100px, 14vw, 150px); /* min 36px, rośnie do 80px max */
+  width:auto;                     /* zachowuje proporcje SVG */
+}
+
+@media (min-width: 900px){
+  .logo{ height:150px; }           /* desktop */
+}
+
+
+/* =======================
+   Taby / sekcje
+   ======================= */
+.tabbar{
+  display:flex;gap:8px;border-bottom:1px solid var(--line);margin:8px 0 16px
+}
+.tabbar .tab{
+  padding:10px 14px;border-radius:10px 10px 0 0;
+  color:var(--muted);cursor:pointer;user-select:none
+}
+.tabbar .tab.active{
+  color:var(--brand);
+  border-bottom:2px solid var(--brand);
+  background:var(--card);
+}
+.tabpane{display:block}
+
+/* =======================
+   Listy / wiersze
+   ======================= */
+.listItem{
+  display:flex;align-items:center;gap:10px;
+  justify-content:space-between;
+  padding:12px 14px;margin:8px 0;
+  background:#fff;border:1px solid var(--line);border-radius:10px;
+}
+.listItem .meta{color:var(--muted);font-size:.95rem}
+
+/* =======================
+   Formularze / pola
+   ======================= */
+label{display:block;margin:6px 0 4px;color:var(--muted);font-size:.9rem}
+input,select,textarea{
+  width:100%;padding:10px 12px;border:1px solid var(--line);
+  border-radius:10px;background:#fff;color:var(--text);
+  outline:none;transition:border-color .15s, box-shadow .15s;
+}
+input:focus,select:focus,textarea:focus{
+  border-color:#DBDBDB(--focus);
+  box-shadow:0 0 0 3px DBDBDB(--focus);
+}
+::placeholder{color:#9aa1a9}
+
+/* =======================
+   Tabela
+   ======================= */
+table{width:100%;border-collapse:separate;border-spacing:0 6px}
+th,td{padding:10px 12px;text-align:left}
+thead th{color:var(--muted);font-weight:600}
+tbody tr{
+  background:#fff;border:1px solid var(--line)
+}
+tbody tr td:first-child{border-top-left-radius:10px;border-bottom-left-radius:10px}
+tbody tr td:last-child {border-top-right-radius:10px;border-bottom-right-radius:10px}
+
+/* =======================
+   Przyciski
+   ======================= */
+.btn{
+  appearance:none;border:none;cursor:pointer;user-select:none;
+  padding:10px 14px;border-radius:10px;font-weight:600;
+  background:var(--brand);color:#fff;transition:filter .15s, background .15s
+}
+.btn:hover{background:var(--brand-600)}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.btn.secondary{
+  background:#fff;color:var(--brand);
+  border:1px solid var(--brand);
+}
+.btn.secondary:hover{background:var(--brand-100)}
+.btn.danger{background:var(--danger);color:#fff;}
+.btn.danger:hover{filter:brightness(.95)}
+
+/* =======================
+   Badges / statusy
+   ======================= */
+.badge{
+  display:inline-block;padding:6px 10px;border-radius:999px;
+  font-size:.8rem;font-weight:600
+}
+.badge.success{background:color-mix(in oklab, var(--success) 15%, white); color:var(--success)}
+.badge.warning{background:color-mix(in oklab, var(--warning) 15%, white); color:var(--warning)}
+.badge.danger {background:color-mix(in oklab, var(--danger)  15%, white); color:var(--danger)}
+.badge.brand  {background:color-mix(in oklab, var(--brand)  15%, white); color:var(--brand)}
+
+/* =======================
+   Baner podziękowania
+   ======================= */
+#bookingThanks{
+  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+  min-width:260px;max-width:min(92vw,560px);
+  background:var(--brand);color:#fff;border-radius:14px;
+  padding:16px 18px;text-align:center;z-index:9999;
+  box-shadow:0 10px 30px rgba(0,0,0,.12);
+}
+#bookingThanks .line1{font-size:1.05rem;font-weight:700;margin-bottom:4px}
+#bookingThanks .line2{font-size:.95rem;opacity:.95}
+
+/* =======================
+   Modale
+   ======================= */
+.modal{
+  position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000
+}
+.modal .overlay{position:absolute;inset:0;background:rgba(0,0,0,.4)}
+.modal .content{
+  position:relative;background:#fff;border:1px solid var(--line);
+  border-radius:12px;padding:16px;max-width:640px;width:92%
+}
+
+/* =======================
+   Kalendarz – highlighty
+   ======================= */
+.calendar .day.free{background:var(--brand-100);border:1px dashed var(--brand);color:var(--text)}
+.calendar .day.taken{background:#fff;border:1px solid var(--line);color:var(--muted)}
+.calendar .day.today{outline:2px solid var(--brand);outline-offset:-2px}
+
+.flatpickr-day.free {
+  border: 2px solid var(--brand);
+  color: var(--brand);
+  font-weight: 500;
+}
+
+
+.flatpickr-day:hover {
+  border-color: var(--brand);
+  background: rgba(160, 120, 40, 0.1);
+  color: var(--brand);
+}
+
+/* =======================
+   Responsywność
+   ======================= */
+@media (max-width:200px){
+  .container{padding:12px}
+  .listItem{flex-direction:column;align-items:flex-start;gap:6px}
+  .btn{padding:10px 12px}
+}
+/* ================================
+   Formularze – spójna kolorystyka
+   ================================ */
+
+/* Wygląd podstawowy pól */
+input,
+select,
+textarea {
+  background: #fff;                  /* białe tło */
+  border: 1px solid #DBDBDB;         /* delikatna ramka */
+  border-radius: 6px;                /* lekko zaokrąglone */
+  padding: 10px;
+  font-size: 16px;
+  color: #333;                       /* tekst ciemny */
+  width: 100%;
+  box-sizing: border-box;
+  transition: border 0.1s, box-shadow 0.1s;
+}
+
+/* Po najechaniu */
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: #b5b5b5;
+}
+
+/* Po kliknięciu (focus) */
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border: 1px solid #b08d57;         /* złoty/brązowy odcień strony */
+  box-shadow: 0 0 4px rgba(176, 141, 87, 0.3);
+}
+
+/* Chrome autofill (usuwa niebieskie tło) */
+input:-webkit-autofill,
+select:-webkit-autofill,
+textarea:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0px 1000px #f8f6f4 inset !important; /* białe tło */
+  -webkit-text-fill-color: #333 !important;                 /* tekst ciemny */
+  border: 1px solid #DBDBDB !important;
+}
+
+/* Autofill + focus */
+input:-webkit-autofill:focus,
+select:-webkit-autofill:focus,
+textarea:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px #f8f6f4 inset !important;
+  border: 1px solid #b08d57 !important;
+}
+/* Logo – wspólne ustawienia */
+.logo img {
+  display: block;
+  margin: 0 auto;       /* wyśrodkowanie */
+  max-width: 220px;     /* ograniczenie szerokości, np. 220px */
+  height: auto;         /* zachowanie proporcji */
+}
+
+/* Logo na telefonach – jeszcze mniejsze */
+@media (max-width: 768px) {
+  .logo img {
+    max-width: 200px;   /* np. 160px na mobile */
+  }
+}
+:root { --success: #16a34a; } /* zielony fallback */
+
+.flatpickr-day.has-slots{ box-shadow: inset 0 -2px 0 0 currentColor; color: var(--success); border-color: var(--success); }
+.flatpickr-day.no-slots{ opacity:.45; }
+.flatpickr-day.has-slots::after{ content: attr(data-count); position:absolute; bottom:2px; right:4px; font-size:10px; }
+  // …
+/* Wybrany dzień – mój kolor, przebija Flatpickra */
+.flatpickr-calendar .dayContainer .flatpickr-day.selected,
+.flatpickr-calendar .dayContainer .flatpickr-day.selected:focus,
+.flatpickr-calendar .dayContainer .flatpickr-day.selected:hover {
+  background: #A0522D !important;   /* <- Twój HEX/RGB */
+  border-color: #8B4513 !important;
+  color: #fff !important;
+}
+/* 2) Ustal kolory dla wybranego dnia we wszystkich stanach */
+.flatpickr-calendar .dayContainer .flatpickr-day.selected,
+.flatpickr-calendar .dayContainer .flatpickr-day.selected:hover,
+.flatpickr-calendar .dayContainer .flatpickr-day.selected:focus,
+.flatpickr-calendar .dayContainer .flatpickr-day.startRange,
+.flatpickr-calendar .dayContainer .flatpickr-day.startRange:hover,
+.flatpickr-calendar .dayContainer .flatpickr-day.startRange:focus,
+.flatpickr-calendar .dayContainer .flatpickr-day.endRange,
+.flatpickr-calendar .dayContainer .flatpickr-day.endRange:hover,
+.flatpickr-calendar .dayContainer .flatpickr-day.endRange:focus {
+  background: #E0FFFF !important;   /* Twoje tło */
+  border-color: #008000 !important;  /* obrys */
+  color: #008000 !important;
+}
+
+/* 3) Dzień „dzisiaj”, gdy NIE jest wybrany – bez tła */
+.flatpickr-calendar .dayContainer .flatpickr-day.today:not(.selected) {
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+.calendar-note {
+  font-size: 12px;
+  color: #b00;       /* czerwony tekst */
+  text-align: center;
+  margin-top: 4px;
+}
+.table-container {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.bookings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.bookings-table th,
+.bookings-table td {
+  padding: 8px;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.bookings-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+}
+
+.btn {
+  padding: 5px 8px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.btn-confirm {
+  background: #4CAF50;
+  color: white;
+}
+
+.btn-cancel {
+  background: #f44336;
+  color: white;
+}
+
+.btn-details {
+  background: #607d8b;
+  color: white;
+}
+
+.btn + .btn {
+  margin-left: 4px;
+}
+
+/* Modal */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 400px;
+  position: relative;
+}
+
+.modal-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 22px;
+  cursor: pointer;
+}
+.btn-confirm { background:#4CAF50 !important; color:white !important; }
+.btn-cancel  { background:#f44336 !important; color:white !important; }
+.btn-details { background:#607d8b !important; color:white !important; }
+
+.modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal.hidden { display: none; }
+.modal-content {
+  background: white;
+  padding: 20px;
+  max-width: 400px;
+  width: 90%;
+  border-radius: 8px;
+}
+.modal-close {
+  position: absolute;
+  right: 15px;
+  top: 10px;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.btn-confirm { background:#16a34a !important; color:#fff !important; }
+.btn-cancel  { background:#dc2626 !important; color:#fff !important; }
+.btn-details { background:#607d8b !important; color:#fff !important; }
