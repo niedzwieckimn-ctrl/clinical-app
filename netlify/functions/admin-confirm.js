@@ -71,7 +71,7 @@ export const handler = async (event) => {
 
   <p>
   📞 W razie zmian lub pytań prosimy o kontakt:<br>
-  tel. <a href="tel:729979396">729 979 396</a><br>
+  tel. <a href="tel:797193931">797 193 931</a><br>
   e-mail: <a href="mailto:massages.n.spa@gmail.com">massages.n.spa@gmail.com</a>
   </p>
 
@@ -123,3 +123,4 @@ async function sendEmail({ to, subject, html, text }) {
     throw new Error(`Resend error: ${out}`);
   }
 }
+
