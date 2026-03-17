@@ -1,4 +1,3 @@
- (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
 diff --git a/assets/admin.js b/assets/admin.js
 index 94fe232f94c92c384625cc258b2efbc97f08d5cf..cba81f9c5d4a872c4857b17f9a4b37282034c99e 100644
 --- a/assets/admin.js
@@ -661,6 +660,3 @@ index 94fe232f94c92c384625cc258b2efbc97f08d5cf..cba81f9c5d4a872c4857b17f9a4b3728
  
  /* removed legacy {fname} */
  })();
- 
-EOF
-)
