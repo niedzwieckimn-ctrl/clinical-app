@@ -1,306 +1,248 @@
-diff --git a/index.html b/index.html
-index 969435c86490e7707dde7d54bc47511f036dd68b..b3b1245b46a0e483284044ef308fbd03478ea9ab 100644
---- a/index.html
-+++ b/index.html
-@@ -1,31 +1,31 @@
- <!doctype html>
- <html lang="pl">
- <head>
-   <meta charset="utf-8" />
-   <meta name="viewport" content="width=device-width, initial-scale=1" />
--  <title>Panel Admin</title>
-+  <title>Massages &amp; Spa Clinical — Panel Admin</title>
-   <link rel="icon" href="assets/logo.svg" />
-   <style>
-     :root { --card: #fff; --muted:#666; --bd:#e9e9e9; }
-     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; padding:20px; background:#f7f7f8; }
-     header { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
-     .wrap { max-width: 980px; margin: 0 auto; }
-     .card { background: var(--card); border:1px solid var(--bd); border-radius:14px; box-shadow: 0 6px 18px rgba(0,0,0,.04); padding:16px; }
-     .stack { display:grid; gap:12px; }
-     .hidden { display:none !important; }
-     .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-     .toolbar input, .toolbar select { padding:8px 10px; border:1px solid var(--bd); border-radius:10px; }
-     .btn { padding:8px 12px; border:1px solid var(--bd); background:#fafafa; border-radius:10px; cursor:pointer; }
-     .btn[disabled] { opacity:.6; cursor:progress; }
- 
-     table { width:100%; border-collapse:collapse; font-size:14px; }
-     th, td { padding:10px 8px; border-bottom:1px solid var(--bd); text-align:left; }
-     th { background:#fafafa; position:sticky; top:0; }
- 
-     .status { padding: 2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--bd); }
-     .pending{ background:#fff8e1; }
-     .confirmed{ background:#e8f5e9; }
-     .canceled{ background:#ffebee; }
-     .muted{ color:var(--muted); }
- 
-     .modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; }
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Massages &amp; Spa Clinical — Panel Admin</title>
+  <link rel="icon" href="assets/logo.svg" />
+  <style>
+    :root { --card: #fff; --muted:#666; --bd:#e9e9e9; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; padding:20px; background:#f7f7f8; }
+    header { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    .card { background: var(--card); border:1px solid var(--bd); border-radius:14px; box-shadow: 0 6px 18px rgba(0,0,0,.04); padding:16px; }
+    .stack { display:grid; gap:12px; }
+    .hidden { display:none !important; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .toolbar input, .toolbar select { padding:8px 10px; border:1px solid var(--bd); border-radius:10px; }
+    .btn { padding:8px 12px; border:1px solid var(--bd); background:#fafafa; border-radius:10px; cursor:pointer; }
+    .btn[disabled] { opacity:.6; cursor:progress; }
+
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { padding:10px 8px; border-bottom:1px solid var(--bd); text-align:left; }
+    th { background:#fafafa; position:sticky; top:0; }
+
+    .status { padding: 2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--bd); }
+    .pending{ background:#fff8e1; }
+    .confirmed{ background:#e8f5e9; }
+    .canceled{ background:#ffebee; }
+    .muted{ color:var(--muted); }
+
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; }
 @@ -35,69 +35,74 @@
- 	.btn-confirm { background:#16a34a; color:#fff; border-color:#128a3f; }
- .btn.btn-confirm { background:#16a34a !important; color:#fff !important; border-color:#128a3f !important; }
- .btn.btn-confirm:hover { filter:brightness(0.95); }
- 
- .btn.btn-cancel  { background:#dc2626 !important; color:#fff !important; border-color:#b31f1f !important; }
- .btn.btn-cancel:hover  { filter:brightness(0.95); }
- 
- .btn.btn-details { background:#607d8b !important; color:#fff !important; border-color:#546e7a !important; }
- .btn.btn-details:hover { filter:brightness(0.95); }
- .status { padding: 2px 8px; border-radius: 999px; font-size: 12px; color:#fff; }
- .status.pending { background:#f59e0b; }      /* bursztyn */
- .status.confirmed { background:#16a34a; }    /* zielony */
- 
- 
- 
- 
-   </style>
- 
-   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-   <script src="assets/supabase-client.js"></script>
- </head>
- <body>
-   <div class="wrap">
-     <header>
-       <img src="assets/logo.svg" alt="" height="36" />
-+      <div>
-+        <h1 style="margin:0; font-size:22px;">Massages &amp; Spa Clinical</h1>
-+        <p style="margin:4px 0 0; color:#6b7280;">Panel administracyjny</p>
-+      </div>
- 
-     </header>
- 
-     <!-- PIN -->
-     <section id="pin-screen" class="card stack">
-       <div class="stack">
-         <h2 style="margin:0">Wejście</h2>
-         <label for="pin-input">PIN admina</label>
-         <input id="pin-input" type="password" inputmode="numeric" maxlength="8" placeholder="****" />
-         <button id="pin-btn" class="btn">Zaloguj</button>
-         <p id="pin-err" class="muted" style="color:#b00;"></p>
-       </div>
-     </section>
- 
-     <!-- TABS -->
-     <nav class="tabs card" id="top-tabs" style="display:none">
-       <button data-tab="bookings">Rezerwacje</button>
-       <button data-tab="slots">Terminy</button>
-       <button data-tab="clients">Klienci</button>
-+      <button data-tab="reports">Raporty PDF</button>
-       <button data-tab="settings">Ustawienia</button>
-     </nav>
- 
-     <!-- REZERWACJE -->
-     <section id="bookings-screen" class="hidden stack">
-       <div class="toolbar row">
-         <select id="status-filter">
-           <option value="">Wszystkie statusy</option>
-           <option value="pending">Oczekujące</option>
-           <option value="confirmed">Potwierdzone</option>
-           <option value="canceled">Anulowane</option>
-         </select>
-         <input id="q" placeholder="Szukaj: klient, e-mail, tel, usługa" />
-         <input id="from" type="date" />
-         <input id="to" type="date" />
-         <button id="refresh" class="btn">Odśwież</button>
-       </div>
- 
-       <div class="table-container">
-         <table class="bookings-table">
-          <thead>
-   <tr>
-     <th>Nr</th>
-     <th>Imię i nazwisko</th>
-     <th>Termin</th>
+	.btn-confirm { background:#16a34a; color:#fff; border-color:#128a3f; }
+.btn.btn-confirm { background:#16a34a !important; color:#fff !important; border-color:#128a3f !important; }
+.btn.btn-confirm:hover { filter:brightness(0.95); }
+
+.btn.btn-cancel  { background:#dc2626 !important; color:#fff !important; border-color:#b31f1f !important; }
+.btn.btn-cancel:hover  { filter:brightness(0.95); }
+
+.btn.btn-details { background:#607d8b !important; color:#fff !important; border-color:#546e7a !important; }
+.btn.btn-details:hover { filter:brightness(0.95); }
+.status { padding: 2px 8px; border-radius: 999px; font-size: 12px; color:#fff; }
+.status.pending { background:#f59e0b; }      /* bursztyn */
+.status.confirmed { background:#16a34a; }    /* zielony */
+
+
+
+
+  </style>
+
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="assets/supabase-client.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img src="assets/logo.svg" alt="" height="36" />
+      <div>
+        <h1 style="margin:0; font-size:22px;">Massages &amp; Spa Clinical</h1>
+        <p style="margin:4px 0 0; color:#6b7280;">Panel administracyjny</p>
+      </div>
+
+    </header>
+
+    <!-- PIN -->
+    <section id="pin-screen" class="card stack">
+      <div class="stack">
+        <h2 style="margin:0">Wejście</h2>
+        <label for="pin-input">PIN admina</label>
+        <input id="pin-input" type="password" inputmode="numeric" maxlength="8" placeholder="****" />
+        <button id="pin-btn" class="btn">Zaloguj</button>
+        <p id="pin-err" class="muted" style="color:#b00;"></p>
+      </div>
+    </section>
+
+    <!-- TABS -->
+    <nav class="tabs card" id="top-tabs" style="display:none">
+      <button data-tab="bookings">Rezerwacje</button>
+      <button data-tab="slots">Terminy</button>
+      <button data-tab="clients">Klienci</button>
+      <button data-tab="reports">Raporty PDF</button>
+      <button data-tab="settings">Ustawienia</button>
+    </nav>
+
+    <!-- REZERWACJE -->
+    <section id="bookings-screen" class="hidden stack">
+      <div class="toolbar row">
+        <select id="status-filter">
+          <option value="">Wszystkie statusy</option>
+          <option value="pending">Oczekujące</option>
+          <option value="confirmed">Potwierdzone</option>
+          <option value="canceled">Anulowane</option>
+        </select>
+        <input id="q" placeholder="Szukaj: klient, e-mail, tel, usługa" />
+        <input id="from" type="date" />
+        <input id="to" type="date" />
+        <button id="refresh" class="btn">Odśwież</button>
+      </div>
+
+      <div class="table-container">
+        <table class="bookings-table">
+         <thead>
+  <tr>
+    <th>Nr</th>
+    <th>Imię i nazwisko</th>
+    <th>Termin</th>
 @@ -143,109 +148,141 @@
-     </section>
- 
- <!-- ============== KLIENCI ============== -->
- <section id="clients-screen" class="hidden card stack">
-   <h2>Klienci</h2>
- 
-   <!-- Pasek narzędzi -->
-   <div class="row" style="gap:.5rem;flex-wrap:wrap">
-     <input id="client-search" type="search" placeholder="Szukaj: imię, e-mail, tel." />
-     <button id="client-add" class="btn">Dodaj klienta</button>
-     <button id="client-export" class="btn">Eksportuj (.enc)</button>
-     <label class="btn" for="client-import-file" style="cursor:pointer;">Importuj (.enc)</label>
-     <input id="client-import-file" type="file" accept=".enc" style="display:none" />
-   </div>
- 
-   <!-- Lista klientów -->
-   <table class="bookings-table">
-     <thead>
-   <tr>
-     <th>Imię i nazwisko</th>
-     <th>Adres</th>
-     <th>Szczegóły</th>
-   </tr>
- </thead>
- <tbody id="clients-rows"></tbody>
--
--    <tbody id="clients-rows"></tbody>
-   </table>
- </section>
- 
- 
-     <!-- USTAWIENIA -->
-+    <section id="reports-screen" class="hidden card stack">
-+      <h2>Raport miesięczny (PDF) — Massages &amp; Spa Clinical</h2>
-+      <div class="row">
-+        <div class="stack">
-+          <label for="report-month">Miesiąc</label>
-+          <input id="report-month" type="month" />
-+        </div>
-+        <div class="stack">
-+          <label for="report-extra-costs">Korekta kosztów (zł)</label>
-+          <input id="report-extra-costs" type="number" step="0.01" value="0" />
-+        </div>
-+      </div>
-+
-+      <label for="report-notes">Notatki do raportu</label>
-+      <textarea id="report-notes" rows="3" placeholder="Np. kampania, zakup sprzętu"></textarea>
-+
-+      <div class="card stack" style="padding:12px; background:#fafafa;">
-+        <h3 style="margin:0;">Dodaj wydatek</h3>
-+        <div class="row">
-+          <input id="expense-date" type="date" />
-+          <select id="expense-category">
-+            <option value="Paliwo">Paliwo</option>
-+            <option value="Kosmetyki">Kosmetyki</option>
-+            <option value="Dodatki">Dodatki</option>
-+            <option value="Marketing">Marketing</option>
-+            <option value="Inne">Inne</option>
-+          </select>
-+          <input id="expense-amount" type="number" min="0" step="0.01" placeholder="Kwota" />
-+          <input id="expense-note" type="text" placeholder="Opis wydatku" />
-+          <button id="expense-add" class="btn">Dodaj wydatek</button>
-+        </div>
-+      </div>
-+
-+      <div class="row">
-+        <button id="report-refresh" class="btn">Przelicz podsumowanie</button>
-+        <button id="report-download" class="btn btn-confirm">Pobierz PDF</button>
-+        <button id="report-autosave" class="btn">Autozapis do pliku (jeśli wspierane)</button>
-+      </div>
-+
-+      <div id="report-summary" class="muted">Wybierz miesiąc i kliknij „Przelicz podsumowanie”.</div>
-+
-+      <h3 style="margin:8px 0 0;">Wizyty w miesiącu</h3>
-+      <table class="bookings-table">
-+        <thead>
-+          <tr>
-+            <th>Data</th>
-+            <th>Klient</th>
-+            <th>Usługa</th>
-+            <th>Kwota</th>
-+            <th>Status</th>
-+          </tr>
-+        </thead>
-+        <tbody id="report-rows"></tbody>
-+      </table>
-+
-+      <h3 style="margin:8px 0 0;">Wydatki w miesiącu</h3>
-+      <table class="bookings-table">
-+        <thead>
-+          <tr>
-+            <th>Data</th>
-+            <th>Kategoria</th>
-+            <th>Opis</th>
-+            <th>Kwota</th>
-+            <th>Akcje</th>
-+          </tr>
-+        </thead>
-+        <tbody id="expense-rows"></tbody>
-+      </table>
-+
-+      <h3 style="margin:8px 0 0;">Historia bilansu miesięcznego (12 mies.)</h3>
-+      <table class="bookings-table">
-+        <thead>
-+          <tr>
-+            <th>Miesiąc</th>
-+            <th>Przychód</th>
-+            <th>Wydatki</th>
-+            <th>Bilans</th>
-+          </tr>
-+        </thead>
-+        <tbody id="balance-history-rows"></tbody>
-+      </table>
-+    </section>
-+
-     <section id="settings-screen" class="hidden card stack">
-       <h2>Ustawienia</h2>
-       <label>„Zalecenia przed zabiegiem”</label>
-       <textarea id="set-prep-text" rows="6"></textarea>
-       <div class="row">
-         <div class="stack">
-           <label>PIN</label>
-           <input id="set-pin" placeholder="np. 2505" />
-         </div>
-         <div class="stack">
-           <label>E-mail</label>
-           <input id="set-email" />
-         </div>
-         <div class="stack">
-           <label>Telefon</label>
-           <input id="set-phone" />
-         </div>
-       </div>
-       <button id="settings-save" class="btn">Zapisz ustawienia</button>
-     </section>
-   </div>
- 
- <script src="assets/admin.js"></script>
- <script src="assets/clients.js"></script>
-+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
- 
--<!-- Modal edycji klienta -->
--<div id="client-details" class="hidden">
--  <div class="flex items-center justify-between mb-3">
--    <h3 id="cd-title" class="text-lg font-semibold">Szczegóły klienta</h3>
--    <div class="space-x-2">
--      <button id="cd-btn-suggestions" class="btn">Sugestie</button>
--      <button id="cd-btn-upcoming"    class="btn">Nadchodzące zabiegi</button>
--      <button id="cd-btn-history"     class="btn">Historia zabiegów</button>
--      <button id="cd-btn-contact"     class="btn">Dane kontaktowe</button>
--      <button id="cd-btn-notes"       class="btn">Notatki</button>
--      <button id="cd-btn-back"        class="btn btn-cancel">Wróć</button>
--    </div>
--  </div>
--
--  <div id="cd-section-suggestions" class="cd-section"></div>
--
--  <div id="cd-section-upcoming" class="cd-section hidden">
--    <table class="table">
--      <thead><tr><th>Termin</th><th>Usługa</th><th>Status</th></tr></thead>
--      <tbody id="cd-upcoming-rows"></tbody>
--    </table>
--  </div>
--
--  <div id="cd-section-history" class="cd-section hidden">
--    <table class="table">
--      <thead><tr><th>Termin</th><th>Usługa</th><th>Status</th></tr></thead>
--      <tbody id="cd-history-rows"></tbody>
--    </table>
--  </div>
--
--  <div id="cd-section-contact" class="cd-section hidden">
--    <p><b>E-mail:</b> <span id="cd-email">-</span></p>
--    <p><b>Telefon:</b> <span id="cd-phone">-</span></p>
--    <p><b>Adres:</b> <span id="cd-address">-</span></p>
--  </div>
--
--  <div id="cd-section-notes" class="cd-section hidden">
--    <div class="grid" style="gap:8px">
--      <label>Preferencje <textarea id="cd-prefs" rows="2"></textarea></label>
--      <label>Alergie <textarea id="cd-allergies" rows="2"></textarea></label>
--      <label>Przeciwwskazania <textarea id="cd-contras" rows="2"></textarea></label>
--      <label>Notatki <textarea id="cd-notes" rows="3"></textarea></label>
--    </div>
--    <div class="mt-2">
--      <button id="cd-save" class="btn">Zapisz</button>
--    </div>
--  </div>
--</div>
--
--</div>
- </body>
- </html>
+    </section>
+
+<!-- ============== KLIENCI ============== -->
+<section id="clients-screen" class="hidden card stack">
+  <h2>Klienci</h2>
+
+  <!-- Pasek narzędzi -->
+  <div class="row" style="gap:.5rem;flex-wrap:wrap">
+    <input id="client-search" type="search" placeholder="Szukaj: imię, e-mail, tel." />
+    <button id="client-add" class="btn">Dodaj klienta</button>
+    <button id="client-export" class="btn">Eksportuj (.enc)</button>
+    <label class="btn" for="client-import-file" style="cursor:pointer;">Importuj (.enc)</label>
+    <input id="client-import-file" type="file" accept=".enc" style="display:none" />
+  </div>
+
+  <!-- Lista klientów -->
+  <table class="bookings-table">
+    <thead>
+  <tr>
+    <th>Imię i nazwisko</th>
+    <th>Adres</th>
+    <th>Szczegóły</th>
+  </tr>
+</thead>
+<tbody id="clients-rows"></tbody>
+  </table>
+</section>
+
+
+    <!-- USTAWIENIA -->
+    <section id="reports-screen" class="hidden card stack">
+      <h2>Raport miesięczny (PDF) — Massages &amp; Spa Clinical</h2>
+      <div class="row">
+        <div class="stack">
+          <label for="report-month">Miesiąc</label>
+          <input id="report-month" type="month" />
+        </div>
+        <div class="stack">
+          <label for="report-extra-costs">Korekta kosztów (zł)</label>
+          <input id="report-extra-costs" type="number" step="0.01" value="0" />
+        </div>
+      </div>
+
+      <label for="report-notes">Notatki do raportu</label>
+      <textarea id="report-notes" rows="3" placeholder="Np. kampania, zakup sprzętu"></textarea>
+
+      <div class="card stack" style="padding:12px; background:#fafafa;">
+        <h3 style="margin:0;">Dodaj wydatek</h3>
+        <div class="row">
+          <input id="expense-date" type="date" />
+          <select id="expense-category">
+            <option value="Paliwo">Paliwo</option>
+            <option value="Kosmetyki">Kosmetyki</option>
+            <option value="Dodatki">Dodatki</option>
+            <option value="Marketing">Marketing</option>
+            <option value="Inne">Inne</option>
+          </select>
+          <input id="expense-amount" type="number" min="0" step="0.01" placeholder="Kwota" />
+          <input id="expense-note" type="text" placeholder="Opis wydatku" />
+          <button id="expense-add" class="btn">Dodaj wydatek</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="report-refresh" class="btn">Przelicz podsumowanie</button>
+        <button id="report-download" class="btn btn-confirm">Pobierz PDF</button>
+        <button id="report-autosave" class="btn">Autozapis do pliku (jeśli wspierane)</button>
+      </div>
+
+      <div id="report-summary" class="muted">Wybierz miesiąc i kliknij „Przelicz podsumowanie”.</div>
+
+      <h3 style="margin:8px 0 0;">Wizyty w miesiącu</h3>
+      <table class="bookings-table">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Klient</th>
+            <th>Usługa</th>
+            <th>Kwota</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="report-rows"></tbody>
+      </table>
+
+      <h3 style="margin:8px 0 0;">Wydatki w miesiącu</h3>
+      <table class="bookings-table">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Kategoria</th>
+            <th>Opis</th>
+            <th>Kwota</th>
+            <th>Akcje</th>
+          </tr>
+        </thead>
+        <tbody id="expense-rows"></tbody>
+      </table>
+
+      <h3 style="margin:8px 0 0;">Historia bilansu miesięcznego (12 mies.)</h3>
+      <table class="bookings-table">
+        <thead>
+          <tr>
+            <th>Miesiąc</th>
+            <th>Przychód</th>
+            <th>Wydatki</th>
+            <th>Bilans</th>
+          </tr>
+        </thead>
+        <tbody id="balance-history-rows"></tbody>
+      </table>
+    </section>
+
+    <section id="settings-screen" class="hidden card stack">
+      <h2>Ustawienia</h2>
+      <label>„Zalecenia przed zabiegiem”</label>
+      <textarea id="set-prep-text" rows="6"></textarea>
+      <div class="row">
+        <div class="stack">
+          <label>PIN</label>
+          <input id="set-pin" placeholder="np. 2505" />
+        </div>
+        <div class="stack">
+          <label>E-mail</label>
+          <input id="set-email" />
+        </div>
+        <div class="stack">
+          <label>Telefon</label>
+          <input id="set-phone" />
+        </div>
+      </div>
+      <button id="settings-save" class="btn">Zapisz ustawienia</button>
+    </section>
+  </div>
+
+<script src="assets/admin.js"></script>
+<script src="assets/clients.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+</body>
+</html>
