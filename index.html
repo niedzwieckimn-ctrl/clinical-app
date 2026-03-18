@@ -29,23 +29,23 @@
     .muted{ color:var(--muted); }
 
     .modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; }
-    .modal:not(.hidden) { display:flex; }
-    .modal-content { background:#fff; border-radius:10px; padding:16px; width: min(520px, 94vw); position:relative; }
-    .modal-close { position:absolute; right:10px; top:8px; cursor:pointer; font-size:22px; }
+@@ -35,69 +35,74 @@
+	.btn-confirm { background:#16a34a; color:#fff; border-color:#128a3f; }
+.btn.btn-confirm { background:#16a34a !important; color:#fff !important; border-color:#128a3f !important; }
+.btn.btn-confirm:hover { filter:brightness(0.95); }
 
-    .btn-confirm { background:#16a34a; color:#fff; border-color:#128a3f; }
-    .btn.btn-confirm { background:#16a34a !important; color:#fff !important; border-color:#128a3f !important; }
-    .btn.btn-confirm:hover { filter:brightness(0.95); }
+.btn.btn-cancel  { background:#dc2626 !important; color:#fff !important; border-color:#b31f1f !important; }
+.btn.btn-cancel:hover  { filter:brightness(0.95); }
 
-    .btn.btn-cancel  { background:#dc2626 !important; color:#fff !important; border-color:#b31f1f !important; }
-    .btn.btn-cancel:hover  { filter:brightness(0.95); }
+.btn.btn-details { background:#607d8b !important; color:#fff !important; border-color:#546e7a !important; }
+.btn.btn-details:hover { filter:brightness(0.95); }
+.status { padding: 2px 8px; border-radius: 999px; font-size: 12px; color:#fff; }
+.status.pending { background:#f59e0b; }      /* bursztyn */
+.status.confirmed { background:#16a34a; }    /* zielony */
 
-    .btn.btn-details { background:#607d8b !important; color:#fff !important; border-color:#546e7a !important; }
-    .btn.btn-details:hover { filter:brightness(0.95); }
 
-    .status { padding: 2px 8px; border-radius: 999px; font-size: 12px; color:#fff; }
-    .status.pending { background:#f59e0b; }
-    .status.confirmed { background:#16a34a; }
+
+
   </style>
 
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
@@ -59,6 +59,7 @@
         <h1 style="margin:0; font-size:22px;">Massages &amp; Spa Clinical</h1>
         <p style="margin:4px 0 0; color:#6b7280;">Panel administracyjny</p>
       </div>
+
     </header>
 
     <!-- PIN -->
@@ -98,36 +99,16 @@
 
       <div class="table-container">
         <table class="bookings-table">
-          <thead>
-            <tr>
-              <th>Nr</th>
-              <th>Imię i nazwisko</th>
-              <th>Termin</th>
-              <th>Status</th>
-              <th>Akcje</th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-      </div>
-
-      <div id="details-modal" class="modal hidden">
-        <div class="modal-content">
-          <span id="close-details" class="modal-close">&times;</span>
-          <h3>Szczegóły rezerwacji</h3>
-          <div id="details-body"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- TERMINY -->
-    <section id="slots-screen" class="hidden card stack">
-      <h2>Terminy (wolne sloty)</h2>
-
+         <thead>
+  <tr>
+    <th>Nr</th>
+    <th>Imię i nazwisko</th>
+    <th>Termin</th>
+@@ -127,125 +132,74 @@
       <div class="row">
         <input id="slot-date" type="datetime-local" step="300" />
         <button id="slot-add" class="btn">Dodaj wolny termin</button>
-        <button id="slot-clean" class="btn">Usuń przeterminowane</button>
+		<button id="slot-clean" class="btn">Usuń przeterminowane</button>
       </div>
 
       <table class="bookings-table">
@@ -142,33 +123,33 @@
       </table>
     </section>
 
-    <!-- KLIENCI -->
-    <section id="clients-screen" class="hidden card stack">
-      <h2>Klienci</h2>
+<!-- ============== KLIENCI ============== -->
+<section id="clients-screen" class="hidden card stack">
+  <h2>Klienci</h2>
 
-      <div class="row" style="gap:.5rem;flex-wrap:wrap">
-        <input id="client-search" type="search" placeholder="Szukaj: imię, e-mail, tel." />
-      </div>
+  <!-- Pasek narzędzi -->
+  <div class="row" style="gap:.5rem;flex-wrap:wrap">
+    <input id="client-search" type="search" placeholder="Szukaj: imię, e-mail, tel." />
+  </div>
 
-      <table class="bookings-table">
-        <thead>
-          <tr>
-            <th>Imię i nazwisko</th>
-            <th>Adres</th>
-            <th>Szczegóły</th>
-          </tr>
-        </thead>
-        <tbody id="clients-rows"></tbody>
-      </table>
-    </section>
+  <!-- Lista klientów -->
+  <table class="bookings-table">
+    <thead>
+  <tr>
+    <th>Imię i nazwisko</th>
+    <th>Adres</th>
+    <th>Szczegóły</th>
+  </tr>
+</thead>
+<tbody id="clients-rows"></tbody>
+  </table>
+</section>
 
-    <!-- FINANSE -->
     <section id="finance-screen" class="hidden card stack">
       <h2>Finanse</h2>
       <div id="finance-root" class="stack"></div>
     </section>
 
-    <!-- USTAWIENIA -->
     <section id="settings-screen" class="hidden card stack">
       <h2>Ustawienia</h2>
       <label>„Zalecenia przed zabiegiem”</label>
@@ -191,8 +172,10 @@
     </section>
   </div>
 
-  <script src="assets/admin.js"></script>
-  <script src="assets/clients.js"></script>
-  <script src="assets/finance.js"></script>
+<script src="assets/admin.js"></script>
+<script src="assets/clients.js"></script>
+<script src="assets/finance.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
 </body>
 </html>
