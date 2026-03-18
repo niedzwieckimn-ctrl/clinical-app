@@ -290,62 +290,73 @@
   }
 
   function exportMonthPdf() {
-    const jspdf = window.jspdf?.jsPDF;
-    if (!jspdf) {
-      alert('Biblioteka PDF nie została załadowana.');
-      return;
-    }
-
     const data = loadData();
     const selectedMonth = getCurrentMonthValue();
     const incomeRows = filterByMonth(data.income, selectedMonth);
     const expenseRows = filterByMonth(data.expenses, selectedMonth);
     const totals = totalsForMonth(data, selectedMonth);
 
-    const doc = new jspdf();
-    let y = 16;
-
-    const addLine = (textLine, indent = 10) => {
-      if (y > 280) {
-        doc.addPage();
-        y = 16;
-      }
-      doc.text(String(textLine), indent, y);
-      y += 7;
-    };
-
-    doc.setFontSize(16);
-    addLine('Massages & Spa Clinical', 10);
-    doc.setFontSize(13);
-    addLine(`Raport finansowy: ${selectedMonth}`, 10);
-    y += 2;
-
-    doc.setFontSize(11);
-    addLine(`Przychody: ${currency(totals.income)}`, 10);
-    addLine(`Wydatki: ${currency(totals.expenses)}`, 10);
-    addLine(`Bilans: ${currency(totals.balance)}`, 10);
-
-    y += 4;
-    addLine('Przychody:', 10);
-    if (!incomeRows.length) {
-      addLine('- Brak przychodów w wybranym miesiącu.', 14);
-    } else {
-      incomeRows.forEach((item) => {
-        addLine(`- ${item.date} | ${item.category} | ${currency(item.amount)} | ${item.note || '-'}`, 14);
-      });
+    const reportWindow = window.open('', '_blank', 'width=960,height=800');
+    if (!reportWindow) {
+      alert('Przeglądarka zablokowała okno raportu PDF.');
+      return;
     }
 
-    y += 4;
-    addLine('Wydatki:', 10);
-    if (!expenseRows.length) {
-      addLine('- Brak wydatków w wybranym miesiącu.', 14);
-    } else {
-      expenseRows.forEach((item) => {
-        addLine(`- ${item.date} | ${item.category} | ${currency(item.amount)} | ${item.note || '-'}`, 14);
-      });
-    }
+    const rowHtml = (item) => `
+      <tr>
+        <td>${esc(item.date || '-')}</td>
+        <td>${esc(item.category || '-')}</td>
+        <td>${esc(item.note || '-')}</td>
+        <td>${currency(item.amount)}</td>
+      </tr>`;
 
-    doc.save(`finanse-${selectedMonth}.pdf`);
+    reportWindow.document.write(`<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <title>Raport finansowy ${esc(selectedMonth)}</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
+    h1, h2 { margin-bottom: 8px; }
+    .summary { margin: 16px 0 24px; padding: 12px; border: 1px solid #ddd; border-radius: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f5f5f5; }
+  </style>
+</head>
+<body>
+  <h1>Massages & Spa Clinical</h1>
+  <h2>Raport finansowy za ${esc(selectedMonth)}</h2>
+  <div class="summary">
+    <p><strong>Przychody:</strong> ${currency(totals.income)}</p>
+    <p><strong>Wydatki:</strong> ${currency(totals.expenses)}</p>
+    <p><strong>Bilans:</strong> ${currency(totals.balance)}</p>
+  </div>
+
+  <h2>Przychody</h2>
+  <table>
+    <thead>
+      <tr><th>Data</th><th>Kategoria</th><th>Opis</th><th>Kwota</th></tr>
+    </thead>
+    <tbody>
+      ${incomeRows.length ? incomeRows.map(rowHtml).join('') : '<tr><td colspan="4">Brak przychodów w wybranym miesiącu.</td></tr>'}
+    </tbody>
+  </table>
+
+  <h2>Wydatki</h2>
+  <table>
+    <thead>
+      <tr><th>Data</th><th>Kategoria</th><th>Opis</th><th>Kwota</th></tr>
+    </thead>
+    <tbody>
+      ${expenseRows.length ? expenseRows.map(rowHtml).join('') : '<tr><td colspan="4">Brak wydatków w wybranym miesiącu.</td></tr>'}
+    </tbody>
+  </table>
+</body>
+</html>`);
+    reportWindow.document.close();
+    reportWindow.focus();
+    reportWindow.print();
   }
 
   function addMoneyEntry(type) {
@@ -430,3 +441,5 @@
     init
   };
 })();
+index.html
+index.html
