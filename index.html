@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Massages &amp; Spa Clinical — Panel Admin</title>
+  <title>Panel Admin</title>
   <link rel="icon" href="assets/logo.svg" />
   <style>
     :root { --card: #fff; --muted:#666; --bd:#e9e9e9; }
@@ -29,7 +29,9 @@
     .muted{ color:var(--muted); }
 
     .modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; }
-@@ -35,50 +35,54 @@
+    .modal:not(.hidden) { display:flex; }
+    .modal-content { background:#fff; border-radius:10px; padding:16px; width: min(520px, 94vw); position:relative; }
+    .modal-close { position:absolute; right:10px; top:8px; cursor:pointer; font-size:22px; }
 	.btn-confirm { background:#16a34a; color:#fff; border-color:#128a3f; }
 .btn.btn-confirm { background:#16a34a !important; color:#fff !important; border-color:#128a3f !important; }
 .btn.btn-confirm:hover { filter:brightness(0.95); }
@@ -55,10 +57,6 @@
   <div class="wrap">
     <header>
       <img src="assets/logo.svg" alt="" height="36" />
-      <div>
-        <h1 style="margin:0; font-size:22px;">Massages &amp; Spa Clinical</h1>
-        <p style="margin:4px 0 0; color:#6b7280;">Panel administracyjny</p>
-      </div>
 
     </header>
 
@@ -84,7 +82,48 @@
     <!-- REZERWACJE -->
     <section id="bookings-screen" class="hidden stack">
       <div class="toolbar row">
-@@ -127,125 +131,66 @@
+        <select id="status-filter">
+          <option value="">Wszystkie statusy</option>
+          <option value="pending">Oczekujące</option>
+          <option value="confirmed">Potwierdzone</option>
+          <option value="canceled">Anulowane</option>
+        </select>
+        <input id="q" placeholder="Szukaj: klient, e-mail, tel, usługa" />
+        <input id="from" type="date" />
+        <input id="to" type="date" />
+        <button id="refresh" class="btn">Odśwież</button>
+      </div>
+
+      <div class="table-container">
+        <table class="bookings-table">
+         <thead>
+  <tr>
+    <th>Nr</th>
+    <th>Imię i nazwisko</th>
+    <th>Termin</th>
+    <th>Status</th>      <!-- ⬅ NOWE -->
+    <th>Akcje</th>
+  </tr>
+</thead>
+
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+
+      <!-- MODAL Szczegóły -->
+      <div id="details-modal" class="modal hidden">
+        <div class="modal-content">
+          <span id="close-details" class="modal-close">&times;</span>
+          <h3>Szczegóły rezerwacji</h3>
+          <div id="details-body"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TERMINY -->
+    <section id="slots-screen" class="hidden card stack">
+      <h2>Terminy (wolne sloty)</h2>
+
       <div class="row">
         <input id="slot-date" type="datetime-local" step="300" />
         <button id="slot-add" class="btn">Dodaj wolny termin</button>
@@ -110,6 +149,10 @@
   <!-- Pasek narzędzi -->
   <div class="row" style="gap:.5rem;flex-wrap:wrap">
     <input id="client-search" type="search" placeholder="Szukaj: imię, e-mail, tel." />
+    <button id="client-add" class="btn">Dodaj klienta</button>
+    <button id="client-export" class="btn">Eksportuj (.enc)</button>
+    <label class="btn" for="client-import-file" style="cursor:pointer;">Importuj (.enc)</label>
+    <input id="client-import-file" type="file" accept=".enc" style="display:none" />
   </div>
 
   <!-- Lista klientów -->
@@ -122,8 +165,13 @@
   </tr>
 </thead>
 <tbody id="clients-rows"></tbody>
+
+    <tbody id="clients-rows"></tbody>
   </table>
 </section>
+
+
+    <!-- USTAWIENIA -->
     <section id="settings-screen" class="hidden card stack">
       <h2>Ustawienia</h2>
       <label>„Zalecenia przed zabiegiem”</label>
@@ -149,5 +197,55 @@
 <script src="assets/admin.js"></script>
 <script src="assets/clients.js"></script>
 
+<!-- Modal edycji klienta -->
+<div id="client-details" class="hidden">
+  <div class="flex items-center justify-between mb-3">
+    <h3 id="cd-title" class="text-lg font-semibold">Szczegóły klienta</h3>
+    <div class="space-x-2">
+      <button id="cd-btn-suggestions" class="btn">Sugestie</button>
+      <button id="cd-btn-upcoming"    class="btn">Nadchodzące zabiegi</button>
+      <button id="cd-btn-history"     class="btn">Historia zabiegów</button>
+      <button id="cd-btn-contact"     class="btn">Dane kontaktowe</button>
+      <button id="cd-btn-notes"       class="btn">Notatki</button>
+      <button id="cd-btn-back"        class="btn btn-cancel">Wróć</button>
+    </div>
+  </div>
+
+  <div id="cd-section-suggestions" class="cd-section"></div>
+
+  <div id="cd-section-upcoming" class="cd-section hidden">
+    <table class="table">
+      <thead><tr><th>Termin</th><th>Usługa</th><th>Status</th></tr></thead>
+      <tbody id="cd-upcoming-rows"></tbody>
+    </table>
+  </div>
+
+  <div id="cd-section-history" class="cd-section hidden">
+    <table class="table">
+      <thead><tr><th>Termin</th><th>Usługa</th><th>Status</th></tr></thead>
+      <tbody id="cd-history-rows"></tbody>
+    </table>
+  </div>
+
+  <div id="cd-section-contact" class="cd-section hidden">
+    <p><b>E-mail:</b> <span id="cd-email">-</span></p>
+    <p><b>Telefon:</b> <span id="cd-phone">-</span></p>
+    <p><b>Adres:</b> <span id="cd-address">-</span></p>
+  </div>
+
+  <div id="cd-section-notes" class="cd-section hidden">
+    <div class="grid" style="gap:8px">
+      <label>Preferencje <textarea id="cd-prefs" rows="2"></textarea></label>
+      <label>Alergie <textarea id="cd-allergies" rows="2"></textarea></label>
+      <label>Przeciwwskazania <textarea id="cd-contras" rows="2"></textarea></label>
+      <label>Notatki <textarea id="cd-notes" rows="3"></textarea></label>
+    </div>
+    <div class="mt-2">
+      <button id="cd-save" class="btn">Zapisz</button>
+    </div>
+  </div>
+</div>
+
+</div>
 </body>
 </html>
