@@ -172,6 +172,10 @@
             <label for="finance-month">Miesiąc</label>
             <input id="finance-month" type="month" value="${esc(selectedMonth)}" />
           </div>
+          <div class="stack">
+            <label>&nbsp;</label>
+            <button id="finance-pdf-export" class="btn">Generuj PDF miesiąca</button>
+          </div>
         </div>
 
         <div class="row">
@@ -285,6 +289,65 @@
     wireActions();
   }
 
+  function exportMonthPdf() {
+    const jspdf = window.jspdf?.jsPDF;
+    if (!jspdf) {
+      alert('Biblioteka PDF nie została załadowana.');
+      return;
+    }
+
+    const data = loadData();
+    const selectedMonth = getCurrentMonthValue();
+    const incomeRows = filterByMonth(data.income, selectedMonth);
+    const expenseRows = filterByMonth(data.expenses, selectedMonth);
+    const totals = totalsForMonth(data, selectedMonth);
+
+    const doc = new jspdf();
+    let y = 16;
+
+    const addLine = (textLine, indent = 10) => {
+      if (y > 280) {
+        doc.addPage();
+        y = 16;
+      }
+      doc.text(String(textLine), indent, y);
+      y += 7;
+    };
+
+    doc.setFontSize(16);
+    addLine('Massages & Spa Clinical', 10);
+    doc.setFontSize(13);
+    addLine(`Raport finansowy: ${selectedMonth}`, 10);
+    y += 2;
+
+    doc.setFontSize(11);
+    addLine(`Przychody: ${currency(totals.income)}`, 10);
+    addLine(`Wydatki: ${currency(totals.expenses)}`, 10);
+    addLine(`Bilans: ${currency(totals.balance)}`, 10);
+
+    y += 4;
+    addLine('Przychody:', 10);
+    if (!incomeRows.length) {
+      addLine('- Brak przychodów w wybranym miesiącu.', 14);
+    } else {
+      incomeRows.forEach((item) => {
+        addLine(`- ${item.date} | ${item.category} | ${currency(item.amount)} | ${item.note || '-'}`, 14);
+      });
+    }
+
+    y += 4;
+    addLine('Wydatki:', 10);
+    if (!expenseRows.length) {
+      addLine('- Brak wydatków w wybranym miesiącu.', 14);
+    } else {
+      expenseRows.forEach((item) => {
+        addLine(`- ${item.date} | ${item.category} | ${currency(item.amount)} | ${item.note || '-'}`, 14);
+      });
+    }
+
+    doc.save(`finanse-${selectedMonth}.pdf`);
+  }
+
   function addMoneyEntry(type) {
     const isIncome = type === 'income';
     const prefix = isIncome ? 'finance-income' : 'finance-expense';
@@ -341,6 +404,7 @@
 
   function wireActions() {
     $('#finance-month')?.addEventListener('change', render);
+    $('#finance-pdf-export')?.addEventListener('click', exportMonthPdf);
     $('#finance-income-add')?.addEventListener('click', () => addMoneyEntry('income'));
     $('#finance-expense-add')?.addEventListener('click', () => addMoneyEntry('expenses'));
     $('#finance-order-add')?.addEventListener('click', addOrder);
