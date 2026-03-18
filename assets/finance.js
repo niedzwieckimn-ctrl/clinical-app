@@ -2,6 +2,8 @@
   'use strict';
 
   const STORAGE_KEY = 'adm_finance_v1';
+  const SUPABASE_TABLE = 'finance_entries';
+  const EMPTY_DATA = { income: [], expenses: [], orders: [] };
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const esc = (value) => String(value || '')
@@ -9,7 +11,14 @@
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  function loadData() {
+  let currentData = { ...EMPTY_DATA };
+  let cloudMode = 'local';
+
+  function cloneEmptyData() {
+    return { income: [], expenses: [], orders: [] };
+  }
+
+  function loadLocalData() {
     try {
       const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
       return {
@@ -18,11 +27,11 @@
         orders: Array.isArray(parsed.orders) ? parsed.orders : []
       };
     } catch {
-      return { income: [], expenses: [], orders: [] };
+      return cloneEmptyData();
     }
   }
 
-  function saveData(data) {
+  function saveLocalData(data) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       income: Array.isArray(data.income) ? data.income : [],
       expenses: Array.isArray(data.expenses) ? data.expenses : [],
@@ -74,6 +83,80 @@
 
   function ordersTotal(data) {
     return (data.orders || []).reduce((sum, item) => sum + toAmount(item.price), 0);
+  }
+
+  function normalizeCloudRows(rows) {
+    const data = cloneEmptyData();
+
+    for (const row of rows || []) {
+      if (row.entry_type === 'income') {
+        data.income.push({
+          id: row.id,
+          date: row.entry_date || '',
+          category: row.category || '',
+          amount: toAmount(row.amount),
+          note: row.note || ''
+        });
+      }
+
+      if (row.entry_type === 'expenses') {
+        data.expenses.push({
+          id: row.id,
+          date: row.entry_date || '',
+          category: row.category || '',
+          amount: toAmount(row.amount),
+          note: row.note || ''
+        });
+      }
+
+      if (row.entry_type === 'orders') {
+        data.orders.push({
+          id: row.id,
+          product: row.product || '',
+          price: toAmount(row.price),
+          link: row.link || ''
+        });
+      }
+    }
+
+    return data;
+  }
+
+  async function loadCloudData() {
+    if (!window.sb) throw new Error('Brak klienta Supabase.');
+
+    const { data, error } = await window.sb
+      .from(SUPABASE_TABLE)
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return normalizeCloudRows(data || []);
+  }
+
+  async function refreshData() {
+    try {
+      currentData = await loadCloudData();
+      saveLocalData(currentData);
+      cloudMode = 'supabase';
+    } catch (error) {
+      console.warn('[finance] fallback local:', error?.message || error);
+      currentData = loadLocalData();
+      cloudMode = 'local';
+    }
+    render();
+  }
+
+  async function insertCloudRow(payload) {
+    if (!window.sb) throw new Error('Brak klienta Supabase.');
+    const { error } = await window.sb.from(SUPABASE_TABLE).insert(payload);
+    if (error) throw error;
+  }
+
+  async function deleteCloudRow(id) {
+    if (!window.sb) throw new Error('Brak klienta Supabase.');
+    const { error } = await window.sb.from(SUPABASE_TABLE).delete().eq('id', id);
+    if (error) throw error;
   }
 
   function renderMoneyRows(tbodyId, rows, emptyText, type) {
@@ -130,7 +213,7 @@
 
     const [year, month] = selectedMonth.split('-').map(Number);
     if (!year || !month) {
-      tbody.innerHTML = '<tr><td colspan="5">Brak danych</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4">Brak danych</td></tr>';
       return;
     }
 
@@ -153,21 +236,26 @@
     tbody.innerHTML = rows.join('');
   }
 
+  function cloudBadge() {
+    return cloudMode === 'supabase'
+      ? '<span style="color:#166534;font-weight:600;">Chmura Supabase: aktywna</span>'
+      : '<span style="color:#b45309;font-weight:600;">Tryb lokalny: brak połączenia z tabelą finance_entries</span>';
+  }
+
   function render() {
     const root = $('#finance-root');
     if (!root) return;
 
-    const data = loadData();
     const selectedMonth = getCurrentMonthValue();
-    const incomeRows = filterByMonth(data.income, selectedMonth).sort((a, b) => String(a.date).localeCompare(String(b.date)));
-    const expenseRows = filterByMonth(data.expenses, selectedMonth).sort((a, b) => String(a.date).localeCompare(String(b.date)));
-    const orderRows = (data.orders || []).slice();
-    const totals = totalsForMonth(data, selectedMonth);
-    const ordersSum = ordersTotal(data);
+    const incomeRows = filterByMonth(currentData.income, selectedMonth).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const expenseRows = filterByMonth(currentData.expenses, selectedMonth).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const orderRows = (currentData.orders || []).slice();
+    const totals = totalsForMonth(currentData, selectedMonth);
+    const ordersSum = ordersTotal(currentData);
 
     root.innerHTML = `
       <div class="card stack" style="background:#fafafa;">
-        <div class="row">
+        <div class="row" style="justify-content:space-between;">
           <div class="stack">
             <label for="finance-month">Miesiąc</label>
             <input id="finance-month" type="month" value="${esc(selectedMonth)}" />
@@ -177,6 +265,7 @@
             <button id="finance-pdf-export" class="btn">Generuj PDF miesiąca</button>
           </div>
         </div>
+        <div>${cloudBadge()}</div>
 
         <div class="row">
           <div class="card" style="flex:1; min-width:180px;">
@@ -285,16 +374,15 @@
     renderMoneyRows('finance-income-rows', incomeRows, 'Brak przychodów w tym miesiącu.', 'income');
     renderMoneyRows('finance-expense-rows', expenseRows, 'Brak wydatków w tym miesiącu.', 'expenses');
     renderOrdersList(orderRows);
-    renderHistory(data, selectedMonth);
+    renderHistory(currentData, selectedMonth);
     wireActions();
   }
 
   function exportMonthPdf() {
-    const data = loadData();
     const selectedMonth = getCurrentMonthValue();
-    const incomeRows = filterByMonth(data.income, selectedMonth);
-    const expenseRows = filterByMonth(data.expenses, selectedMonth);
-    const totals = totalsForMonth(data, selectedMonth);
+    const incomeRows = filterByMonth(currentData.income, selectedMonth);
+    const expenseRows = filterByMonth(currentData.expenses, selectedMonth);
+    const totals = totalsForMonth(currentData, selectedMonth);
 
     const reportWindow = window.open('', '_blank', 'width=960,height=800');
     if (!reportWindow) {
@@ -359,7 +447,7 @@
     reportWindow.print();
   }
 
-  function addMoneyEntry(type) {
+  async function addMoneyEntry(type) {
     const isIncome = type === 'income';
     const prefix = isIncome ? 'finance-income' : 'finance-expense';
 
@@ -373,19 +461,36 @@
       return;
     }
 
-    const data = loadData();
-    data[type].push({
+    const item = {
       id: uid(),
       date,
       category: category.trim(),
       amount,
       note: note.trim()
-    });
-    saveData(data);
+    };
+
+    currentData[type].push(item);
+    saveLocalData(currentData);
+
+    try {
+      await insertCloudRow({
+        id: item.id,
+        entry_type: type,
+        entry_date: item.date,
+        category: item.category,
+        amount: item.amount,
+        note: item.note
+      });
+      cloudMode = 'supabase';
+    } catch (error) {
+      cloudMode = 'local';
+      alert(`Zapisano lokalnie. Supabase błąd: ${error?.message || error}`);
+    }
+
     render();
   }
 
-  function addOrder() {
+  async function addOrder() {
     const product = $('#finance-order-product')?.value || '';
     const price = toAmount($('#finance-order-price')?.value || 0);
     const link = $('#finance-order-link')?.value || '';
@@ -395,21 +500,45 @@
       return;
     }
 
-    const data = loadData();
-    data.orders.push({
+    const item = {
       id: uid(),
       product: product.trim(),
       price,
       link: link.trim()
-    });
-    saveData(data);
+    };
+
+    currentData.orders.push(item);
+    saveLocalData(currentData);
+
+    try {
+      await insertCloudRow({
+        id: item.id,
+        entry_type: 'orders',
+        product: item.product,
+        price: item.price,
+        link: item.link
+      });
+      cloudMode = 'supabase';
+    } catch (error) {
+      cloudMode = 'local';
+      alert(`Zapisano lokalnie. Supabase błąd: ${error?.message || error}`);
+    }
+
     render();
   }
 
-  function deleteEntry(type, id) {
-    const data = loadData();
-    data[type] = data[type].filter((item) => item.id !== id);
-    saveData(data);
+  async function deleteEntry(type, id) {
+    currentData[type] = currentData[type].filter((item) => item.id !== id);
+    saveLocalData(currentData);
+
+    try {
+      await deleteCloudRow(id);
+      cloudMode = 'supabase';
+    } catch (error) {
+      cloudMode = 'local';
+      alert(`Usunięto lokalnie. Supabase błąd: ${error?.message || error}`);
+    }
+
     render();
   }
 
@@ -434,12 +563,11 @@
   }
 
   function init() {
-    render();
+    refreshData();
   }
 
   window.AdminFinance = {
-    init
+    init,
+    refresh: refreshData
   };
 })();
-index.html
-index.html
