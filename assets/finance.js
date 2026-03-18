@@ -1,0 +1,301 @@
+(function () {
+  'use strict';
+
+  const STORAGE_KEY = 'adm_finance_v1';
+
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const esc = (value) => String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  function loadData() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      return {
+        income: Array.isArray(parsed.income) ? parsed.income : [],
+        expenses: Array.isArray(parsed.expenses) ? parsed.expenses : []
+      };
+    } catch {
+      return { income: [], expenses: [] };
+    }
+  }
+
+  function saveData(data) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      income: Array.isArray(data.income) ? data.income : [],
+      expenses: Array.isArray(data.expenses) ? data.expenses : []
+    }));
+  }
+
+  function uid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'fin-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+
+  function monthKey(dateValue) {
+    if (!dateValue) return '';
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return '';
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  function toAmount(value) {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : 0;
+  }
+
+  function currency(value) {
+    return `${toAmount(value).toFixed(2)} zł`;
+  }
+
+  function getCurrentMonthValue() {
+    const input = $('#finance-month');
+    if (input && input.value) return input.value;
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  function filterByMonth(list, ym) {
+    return list.filter((item) => monthKey(item.date) === ym);
+  }
+
+  function totalsForMonth(data, ym) {
+    const income = filterByMonth(data.income, ym).reduce((sum, item) => sum + toAmount(item.amount), 0);
+    const expenses = filterByMonth(data.expenses, ym).reduce((sum, item) => sum + toAmount(item.amount), 0);
+    return {
+      income,
+      expenses,
+      balance: income - expenses
+    };
+  }
+
+  function renderTableRows(tbodyId, rows, emptyText, type) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="5">${esc(emptyText)}</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = rows.map((item) => `
+      <tr>
+        <td>${esc(item.date)}</td>
+        <td>${esc(item.category)}</td>
+        <td>${esc(item.note || '-')}</td>
+        <td>${currency(item.amount)}</td>
+        <td>
+          <button class="btn btn-cancel" data-finance-delete="${esc(item.id)}" data-finance-type="${esc(type)}">
+            Usuń
+          </button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function renderHistory(data, selectedMonth) {
+    const tbody = $('#finance-history-rows');
+    if (!tbody) return;
+
+    const [year, month] = selectedMonth.split('-').map(Number);
+    if (!year || !month) {
+      tbody.innerHTML = '<tr><td colspan="4">Brak danych</td></tr>';
+      return;
+    }
+
+    const rows = [];
+    for (let offset = 11; offset >= 0; offset -= 1) {
+      const date = new Date(year, month - 1 - offset, 1);
+      const ym = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const totals = totalsForMonth(data, ym);
+
+      rows.push(`
+        <tr>
+          <td>${esc(ym)}</td>
+          <td>${currency(totals.income)}</td>
+          <td>${currency(totals.expenses)}</td>
+          <td><strong>${currency(totals.balance)}</strong></td>
+        </tr>
+      `);
+    }
+
+    tbody.innerHTML = rows.join('');
+  }
+
+  function render() {
+    const root = $('#finance-root');
+    if (!root) return;
+
+    const data = loadData();
+    const selectedMonth = getCurrentMonthValue();
+    const incomeRows = filterByMonth(data.income, selectedMonth).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const expenseRows = filterByMonth(data.expenses, selectedMonth).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const totals = totalsForMonth(data, selectedMonth);
+
+    root.innerHTML = `
+      <div class="card stack" style="background:#fafafa;">
+        <div class="row">
+          <div class="stack">
+            <label for="finance-month">Miesiąc</label>
+            <input id="finance-month" type="month" value="${esc(selectedMonth)}" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="card" style="flex:1; min-width:220px;">
+            <h3 style="margin:0 0 8px;">Przychód</h3>
+            <div style="font-size:28px; font-weight:700; color:#166534;">${currency(totals.income)}</div>
+          </div>
+          <div class="card" style="flex:1; min-width:220px;">
+            <h3 style="margin:0 0 8px;">Wydatki</h3>
+            <div style="font-size:28px; font-weight:700; color:#b91c1c;">${currency(totals.expenses)}</div>
+          </div>
+          <div class="card" style="flex:1; min-width:220px;">
+            <h3 style="margin:0 0 8px;">Bilans</h3>
+            <div style="font-size:28px; font-weight:700; color:${totals.balance >= 0 ? '#166534' : '#b91c1c'};">
+              ${currency(totals.balance)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card stack">
+        <h3 style="margin:0;">Dodaj przychód</h3>
+        <div class="row">
+          <input id="finance-income-date" type="date" />
+          <input id="finance-income-category" type="text" placeholder="Np. masaż / zabieg" />
+          <input id="finance-income-amount" type="number" step="0.01" min="0" placeholder="Kwota" />
+          <input id="finance-income-note" type="text" placeholder="Notatka" />
+          <button id="finance-income-add" class="btn btn-confirm">Dodaj przychód</button>
+        </div>
+      </div>
+
+      <div class="card stack">
+        <h3 style="margin:0;">Dodaj wydatek</h3>
+        <div class="row">
+          <input id="finance-expense-date" type="date" />
+          <input id="finance-expense-category" type="text" placeholder="Np. paliwo / kosmetyki / dodatki" />
+          <input id="finance-expense-amount" type="number" step="0.01" min="0" placeholder="Kwota" />
+          <input id="finance-expense-note" type="text" placeholder="Notatka" />
+          <button id="finance-expense-add" class="btn">Dodaj wydatek</button>
+        </div>
+      </div>
+
+      <div class="card stack">
+        <h3 style="margin:0;">Przychody w miesiącu</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Kategoria</th>
+              <th>Opis</th>
+              <th>Kwota</th>
+              <th>Akcje</th>
+            </tr>
+          </thead>
+          <tbody id="finance-income-rows"></tbody>
+        </table>
+      </div>
+
+      <div class="card stack">
+        <h3 style="margin:0;">Wydatki w miesiącu</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Kategoria</th>
+              <th>Opis</th>
+              <th>Kwota</th>
+              <th>Akcje</th>
+            </tr>
+          </thead>
+          <tbody id="finance-expense-rows"></tbody>
+        </table>
+      </div>
+
+      <div class="card stack">
+        <h3 style="margin:0;">Historia 12 miesięcy</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Miesiąc</th>
+              <th>Przychód</th>
+              <th>Wydatki</th>
+              <th>Bilans</th>
+            </tr>
+          </thead>
+          <tbody id="finance-history-rows"></tbody>
+        </table>
+      </div>
+    `;
+
+    const today = new Date().toISOString().slice(0, 10);
+    $('#finance-income-date').value = today;
+    $('#finance-expense-date').value = today;
+
+    renderTableRows('finance-income-rows', incomeRows, 'Brak przychodów w tym miesiącu.', 'income');
+    renderTableRows('finance-expense-rows', expenseRows, 'Brak wydatków w tym miesiącu.', 'expenses');
+    renderHistory(data, selectedMonth);
+    wireActions();
+  }
+
+  function addEntry(type) {
+    const isIncome = type === 'income';
+    const prefix = isIncome ? 'finance-income' : 'finance-expense';
+
+    const date = $(`#${prefix}-date`)?.value || '';
+    const category = $(`#${prefix}-category`)?.value || '';
+    const amount = toAmount($(`#${prefix}-amount`)?.value || 0);
+    const note = $(`#${prefix}-note`)?.value || '';
+
+    if (!date || !category.trim() || amount <= 0) {
+      alert('Uzupełnij datę, kategorię i poprawną kwotę.');
+      return;
+    }
+
+    const data = loadData();
+    data[type].push({
+      id: uid(),
+      date,
+      category: category.trim(),
+      amount,
+      note: note.trim()
+    });
+    saveData(data);
+    render();
+  }
+
+  function deleteEntry(type, id) {
+    const data = loadData();
+    data[type] = data[type].filter((item) => item.id !== id);
+    saveData(data);
+    render();
+  }
+
+  function wireActions() {
+    $('#finance-month')?.addEventListener('change', render);
+    $('#finance-income-add')?.addEventListener('click', () => addEntry('income'));
+    $('#finance-expense-add')?.addEventListener('click', () => addEntry('expenses'));
+
+    $('#finance-root')?.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-finance-delete]');
+      if (!button) return;
+
+      const id = button.dataset.financeDelete;
+      const type = button.dataset.financeType;
+      if (!id || !type) return;
+
+      if (!confirm('Usunąć ten wpis?')) return;
+      deleteEntry(type, id);
+    });
+  }
+
+  function init() {
+    render();
+  }
+
+  window.AdminFinance = {
+    init
+  };
+})();
