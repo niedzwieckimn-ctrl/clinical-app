@@ -1,1043 +1,248 @@
-/* =========================================
-   Admin panel – NOWA WERSJA (jednoplikowa)
-   - PIN lokalny 2505 (bez pobierania z DB)
-   - Zakładki: Rezerwacje / Terminy / Klienci / Ustawienia
-   - Rezerwacje: bookings_view + Netlify Functions confirm/cancel
-   - Terminy: tylko data/godzina (bez usługi) + zaokrąglanie do 5 minut
-   - Klienci: tylko LocalStorage + eksport/import .json
-   - Ustawienia: settings (prep_text, pin, contact_*)
-   Wymagania: window.sb = Supabase client (assets/supabase-client.js)
-========================================= */
-
-(function () {
-  'use strict';
-
-  // --- KONFIG ---------------------------------------------------------------
-  let PIN = '2505';
-  const AUTH_KEY = 'adm_ok';
-  const SETTINGS_KEY = 'adm_settings_v1';
-
-
-  // --- UTIL -----------------------------------------------------------------
-  const $  = (s, r=document) => r.querySelector(s);
-  const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
-  const fmtWhen = (iso) => { try { return new Date(iso).toLocaleString('pl-PL', { dateStyle:'medium', timeStyle:'short' }); } catch { return iso||''; } };
-  const uid = () => (crypto?.randomUUID ? crypto.randomUUID() : 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
-function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function toTelHref(phone){
-  const num = String(phone||'').replace(/[^\d+]/g,''); // tylko cyfry i +
-  return num ? `tel:${num}` : '';
-}
-function toMailHref(email, subject='Rezerwacja potwierdzona'){
-  const e = String(email||'').trim();
-  return e ? `mailto:${encodeURIComponent(e)}?subject=${encodeURIComponent(subject)}` : '';
-}
-function toMapsHref(address){
-  const a = String(address||'').trim();
-  return a ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(a)}` : '';
-}
-
-function loadLocalSettings() {
-  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; }
-  catch { return {}; }
-}
-
-function hydrateSettingsForm() {
-  const s = loadLocalSettings();
-  const savedPin = String(s.pin || '').trim();
-  if (savedPin) PIN = savedPin;
-  const pinEl = document.getElementById('set-pin');
-  const emailEl = document.getElementById('set-email');
-  const phoneEl = document.getElementById('set-phone');
-  const prepEl = document.getElementById('set-prep-text');
-  if (pinEl) pinEl.value = savedPin || PIN;
-  if (emailEl) emailEl.value = s.contact_email || '';
-  if (phoneEl) phoneEl.value = s.contact_phone || '';
-  if (prepEl) prepEl.value = s.prep_text || '';
-}
-
-function wireSettings() {
-  document.getElementById('settings-save')?.addEventListener('click', () => {
-    const nextPin = (document.getElementById('set-pin')?.value || '').trim();
-    const next = {
-      pin: nextPin || PIN,
-      contact_email: (document.getElementById('set-email')?.value || '').trim(),
-      contact_phone: (document.getElementById('set-phone')?.value || '').trim(),
-      prep_text: (document.getElementById('set-prep-text')?.value || '').trim()
-    };
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
-    PIN = next.pin;
-    alert('Ustawienia zapisane.');
-  });
-}
-
-  // --- TABS -----------------------------------------------------------------
-  function showNav() { const nav = $('#top-tabs'); if (nav) nav.style.display = ''; }
-  function showTab(name) {
-    const ids = ['bookings','slots','clients','reports','settings'];
-    for (const id of ids) {
-      const el = document.getElementById(id+'-screen');
-      if (el) el.classList.toggle('hidden', id !== name);
-    }
-    if      (name==='bookings') initBookings();
-    else if (name==='slots')    loadSlots();
-    else if (name==='clients')  window.Clients?.render();
-    else if (name==='reports')  initReports();
-    else if (name==='settings') hydrateSettingsForm();
-  }
-  (function wireTabs(){
-    $('#top-tabs')?.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-tab]');
-      if (!btn) return;
-      showTab(btn.dataset.tab);
-    });
-  })();
-
-  // --- LOGIN ----------------------------------------------------------------
-  function wireLogin() {
-    const pinScr  = $('#pin-screen');
-    const bookScr = document.getElementById('bookings-screen') || document.getElementById('list-screen');
-
-    async function afterLogin() {
-      pinScr?.classList.add('hidden');
-      bookScr?.classList.remove('hidden');
-      showNav();
-      showTab('bookings');
-    }
-
-    if (localStorage.getItem(AUTH_KEY) === '1') { afterLogin(); return; }
-
-    const btn = $('#pin-btn'), inp = $('#pin-input'), err = $('#pin-err');
-    const enter = async () => {
-      const val = String(inp?.value || '').trim();
-      if (!val) { err.textContent = 'Wpisz PIN'; inp?.focus(); return; }
-      if (val === PIN || val === '2505') { localStorage.setItem(AUTH_KEY,'1'); await afterLogin(); }
-      else { err.textContent = 'Nieprawidłowy PIN'; inp?.select?.(); }
-    };
-    btn?.addEventListener('click', enter);
-    inp?.addEventListener('keydown', (e) => { if (e.key==='Enter') enter(); });
-  }
-
-  // --- BOOKINGS -------------------------------------------------------------
- async function fetchBookings() {
-  const nowIso = new Date().toISOString();
-  let q = window.sb.from('bookings_view')
-    .select('*')
-    .order('when', { ascending: true });
-
-  // 1) Nie pokazuj anulowanych
-  q = q.neq('status', 'Anulowana');
-
-  // 2) Nie pokazuj przeterminowanych (wszystko, co w przeszłości)
-  q = q.gte('when', nowIso);
-
-  // (opcjonalnie) filtr statusu z selecta, gdy chcesz go respektować
-  const s = document.getElementById('status-filter')?.value || '';
-  if (s) q = q.eq('status', s);
-
-  // (opcjonalnie) prosty search po imieniu/mailu
-  const term = (document.getElementById('q')?.value || '').trim();
-  if (term) {
-    q = q.or(`client_name.ilike.%${term}%,client_email.ilike.%${term}%`);
-  }
-
-  const { data, error } = await q;
-  if (error) throw error;
-  return data || [];
-}
-
-
-  function renderBookingsRows(list) {
-  const tbody = document.getElementById('rows');
-  if (!tbody) return;
-  tbody.innerHTML = '';
-
-  if (!list.length) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="4">Brak rezerwacji</td>';
-    tbody.appendChild(tr);
-    return;
-  }
-
-for (const b of list) {
-  const isConfirmed = (b.status === 'Potwierdzona');
-  const badge = isConfirmed
-    ? '<span class="status confirmed">Potwierdzona</span>'
-    : '<span class="status pending">Oczekująca</span>';
-
-  const tr = document.createElement('tr');
-  tr.innerHTML = `
-    <td>${b.booking_no || '-'}</td>
-    <td>${b.client_name || '-'}</td>
-    <td>${fmtWhen(b.when)}</td>
-    <td>${badge}</td>
-    <td>
-      <button class="btn btn-confirm"
-              style="background:#16a34a;color:#fff;border-color:#128a3f"
-              data-action="confirm" data-id="${b.booking_no}"
-              ${isConfirmed ? 'disabled' : ''}>
-        Potwierdź
-      </button>
-      <button class="btn btn-cancel"
-              style="background:#dc2626;color:#fff;border-color:#b31f1f"
-              data-action="cancel" data-id="${b.booking_no}">
-        Usuń
-      </button>
-      <button class="btn btn-details"
-              style="background:#607d8b;color:#fff;border-color:#546e7a"
-              data-action="details" data-id="${b.booking_no}">
-        Szczegóły
-      </button>
-    </td>`;
-  tr.dataset.details = JSON.stringify(b);
-  tbody.appendChild(tr);
-}
-
-}
-
-
-  async function initBookings() {
-    try { renderBookingsRows(await fetchBookings()); }
-    catch(e){
-      const tbody=$('#rows');
-      if (tbody) tbody.innerHTML = `<tr><td colspan="4">${e?.message||'Błąd'}</td></tr>`;
-    }
-  }
-
-  (function wireBookingsToolbar(){
-    $('#refresh')?.addEventListener('click', initBookings);
-    $('#status-filter')?.addEventListener('change', initBookings);
-    $('#q')?.addEventListener('input', () => initBookings());
-    $('#from')?.addEventListener('change', initBookings);
-    $('#to')?.addEventListener('change', initBookings);
-  })();
-
-  async function confirmBooking(booking_no) {
-  try {
-    const res = await fetch('/.netlify/functions/admin-confirm', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ booking_no })
-    });
-
-    const text = await res.text();
-    if (!res.ok) {
-      // pokaż co przyszło z funkcji
-      throw new Error(text || `HTTP ${res.status}`);
-    }
-    // spróbuj zdekodować JSON
-    let out = {};
-    try { out = JSON.parse(text || '{}'); } catch { /* ignoruj */ }
-    return out;
-  } catch (e) {
-    console.warn('[admin-confirm] problem, używam fallbacku:', e);
-    // Fallback bez e-maili – bezpiecznie zmieniamy status od razu w Supabase:
-    const { error } = await window.sb
-  .from('bookings')
-  .delete()
-  .eq('booking_no', booking_no);
-    if (error) throw error;
-    return { ok:true, fallback:true };
-  }
-}
-
-
-  async function cancelBooking(booking_no) {
-    try {
-      const res = await fetch('/.netlify/functions/admin-cancel', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ booking_no })
-      });
-      const out = await res.text();
-      if (!res.ok) throw new Error(out);
-      return JSON.parse(out);
-    } catch (e) {
-  console.warn('[admin-cancel] fallback (bez funkcji):', e);
-
-  // 1) pobierz when (i ewentualnie slot_id) z widoku
-  const { data: b, error: gErr } = await window.sb
-    .from('bookings_view')
-    .select('when, slot_id')
-    .eq('booking_no', booking_no)
-    .single();
-  if (gErr) throw gErr;
-
-  // 2) oznacz rezerwację jako anulowaną
-  const { error: updErr } = await window.sb
-    .from('bookings')
-    .update({ status: 'Anulowana', canceled_at: new Date().toISOString() })
-    .eq('booking_no', booking_no);
-  if (updErr) throw updErr;
-
-  // 3) zwolnij slot
-  try {
-    if (b?.slot_id) {
-      await window.sb.from('slots').update({ taken: false }).eq('id', b.slot_id);
-    } else {
-      const { error: freeErr } = await window.sb
-        .from('slots')
-        .update({ taken: false })
-        .eq('when', b.when);
-      if (freeErr && new Date(b.when) > new Date()) {
-        await window.sb.from('slots').insert({ when: b.when, taken: false });
-      }
-    }
-  } catch (e2) {
-    console.log('[fallback] free slot warn:', e2?.message || e2);
-  }
-
-  return { ok: true, fallback: true };
-}
-
-  }
-
-  (function wireGlobalActions(){
-    document.addEventListener('click', async (e) => {
-      const btn = e.target.closest('[data-action]'); if (!btn) return;
-      const action = btn.dataset.action; const id = btn.dataset.id;
-
-      if (action === 'details') {
-  // PODMIEŃ cały ten blok na:
-  const tr = btn.closest('tr');
-  const b = JSON.parse(tr.dataset.details || '{}');
-
-  const addr  = b.address || '';
-  const email = b.client_email || b.email || '';
-  const phone = b.phone || b.client_phone || '';
-
-  const mapH  = addr  ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}` : '';
-  const mailH = email ? `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent('Rezerwacja potwierdzona')}` : '';
-  const telH  = phone ? `tel:${String(phone).replace(/[^\d+]/g,'')}` : '';
-
-  const modal = document.getElementById('details-modal');
-  const body  = document.getElementById('details-body');
-  if (modal && body) {
-    body.innerHTML = `
-      <p><b>Nr rezerwacji:</b> ${b.booking_no || ''}</p>
-      <p><b>Imię i nazwisko:</b> ${b.client_name || ''}</p>
-      <p><b>Termin:</b> ${fmtWhen(b.when)}</p>
-      <p><b>Usługa:</b> ${b.service_name || ''}</p>
-      <p><b>Adres:</b> ${addr ? `<a href="${mapH}" target="_blank" rel="noopener">${addr}</a>` : '-'}</p>
-      <p><b>E-mail:</b> ${email ? `<a href="${mailH}">${email}</a>` : '-'}</p>
-      <p><b>Telefon:</b> ${phone ? `<a href="${telH}">${phone}</a>` : '-'}</p>
-      <p><b>Uwagi:</b> ${b.notes || '-'}</p>`;
-    modal.classList.remove('hidden');
-  }
-  return;
-}
-
-      if (action==='confirm') {
-        btn.disabled = true;
-        try { await confirmBooking(id); await initBookings(); }
-        catch(err){ alert('Błąd potwierdzania: ' + (err?.message||err)); }
-        finally { btn.disabled = false; }
-        return;
-      }
-
-      if (action==='cancel') {
-        if (!confirm('Na pewno anulować tę rezerwację?')) return;
-        btn.disabled = true;
-        try { await cancelBooking(id); await initBookings(); }
-        catch(err){ alert('Błąd anulowania: ' + (err?.message||err)); }
-        finally { btn.disabled = false; }
-        return;
-      }
-    });
-    $('#close-details')?.addEventListener('click', () => { $('#details-modal')?.classList.add('hidden'); });
-    document.addEventListener('keydown', (e) => { if (e.key==='Escape') $('#details-modal')?.classList.add('hidden'); });
-  })();
-
-  // --- SLOTS (bez usługi, zaokrąglanie do 5 min) ----------------------------
-  async function loadSlots() {
-  const tbody = document.getElementById('slots-rows'); if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="3">Ładowanie…</td></tr>';
-
-  const nowIso = new Date().toISOString();
-
-  const { data, error } = await window.sb
-    .from('slots')
-    .select('id, when, taken')
-    .gte('when', nowIso)                // <— POKAZUJEMY TYLKO PRZYSZŁE
-    .order('when', { ascending:true });
-
-  if (error) { tbody.innerHTML = `<tr><td colspan="3">${error.message}</td></tr>`; return; }
-
-  tbody.innerHTML = '';
-  for (const s of (data || [])) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${fmtWhen(s.when)}</td>
-      <td>${s.taken ? 'Zajęty' : 'Wolny'}</td>
-      <td><button class="btn" data-slot-del="${s.id}" ${s.taken ? 'disabled':''}>Usuń</button></td>`;
-    tbody.appendChild(tr);
-  }
-
-  if (!data || data.length === 0) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="3">Brak przyszłych terminów</td>';
-    tbody.appendChild(tr);
-  }
-}
-
-
-// =============== RAPORTY PDF ===============
-const EXPENSES_KEY = 'adm_expenses_v1';
-let reportsState = { rows: [], summary: null, expenses: [] };
-
-function getMonthRange(monthValue) {
-  const [y, m] = String(monthValue || '').split('-').map(Number);
-  if (!y || !m) return null;
-  const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0));
-  const end = new Date(Date.UTC(y, m, 1, 0, 0, 0));
-  return { startIso: start.toISOString(), endIso: end.toISOString(), label: `${String(m).padStart(2, '0')}-${y}`, ym: `${y}-${String(m).padStart(2, '0')}` };
-}
-
-function expensesLoad() {
-  try {
-    const raw = localStorage.getItem(EXPENSES_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function expensesSave(list) {
-  localStorage.setItem(EXPENSES_KEY, JSON.stringify(list || []));
-}
-
-function monthKeyFromDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return '';
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function monthExpenses(monthValue) {
-  return expensesLoad().filter((e) => monthKeyFromDate(e.date) === monthValue);
-}
-
-function pickAmount(row) {
-  const candidates = [row.service_price, row.price, row.amount, row.total, row.revenue];
-  for (const val of candidates) {
-    const n = Number(val);
-    if (Number.isFinite(n)) return n;
-  }
-  return 0;
-}
-
-async function fetchMonthlyReport(monthValue) {
-  const range = getMonthRange(monthValue);
-  if (!range) throw new Error('Niepoprawny miesiąc.');
-
-  const { data, error } = await window.sb
-    .from('bookings_view')
-    .select('booking_no, when, client_name, service_name, status, service_price, price, amount, total, revenue')
-    .gte('when', range.startIso)
-    .lt('when', range.endIso)
-    .order('when', { ascending: true });
-
-  if (error) throw error;
-
-  const rows = (data || []).map((row) => ({ ...row, calcAmount: pickAmount(row) }));
-  const confirmed = rows.filter((r) => String(r.status || '').toLowerCase().includes('potwier'));
-  const canceled = rows.filter((r) => String(r.status || '').toLowerCase().includes('anul'));
-  const expenses = monthExpenses(range.ym);
-  const expensesTotal = expenses.reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
-
-  return {
-    rows,
-    expenses,
-    summary: {
-      totalCount: rows.length,
-      confirmedCount: confirmed.length,
-      canceledCount: canceled.length,
-      revenue: confirmed.reduce((a, b) => a + b.calcAmount, 0),
-      expenses: expensesTotal,
-      rangeLabel: range.label,
-      ym: range.ym
-    }
-  };
-}
-
-function renderExpensesRows() {
-  const tbody = document.getElementById('expense-rows');
-  if (!tbody) return;
-  const expenses = reportsState.expenses || [];
-  tbody.innerHTML = '';
-  if (!expenses.length) {
-    tbody.innerHTML = '<tr><td colspan="5">Brak wydatków w miesiącu.</td></tr>';
-    return;
-  }
-
-  for (const e of expenses.sort((a, b) => String(a.date).localeCompare(String(b.date)))) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${esc(e.date || '-')}</td>
-      <td>${esc(e.category || '-')}</td>
-      <td>${esc(e.note || '-')}</td>
-      <td>${(Number(e.amount) || 0).toFixed(2)} zł</td>
-      <td><button class="btn btn-cancel" data-expense-del="${esc(e.id)}">Usuń</button></td>`;
-    tbody.appendChild(tr);
-  }
-}
-
-async function renderBalanceHistory() {
-  const tbody = document.getElementById('balance-history-rows');
-  const month = document.getElementById('report-month')?.value;
-  if (!tbody || !month) return;
-
-  const [year, mon] = month.split('-').map(Number);
-  const start = new Date(Date.UTC(year, mon - 12, 1, 0, 0, 0));
-  const end = new Date(Date.UTC(year, mon, 1, 0, 0, 0));
-
-  const { data, error } = await window.sb
-    .from('bookings_view')
-    .select('when, status, service_price, price, amount, total, revenue')
-    .gte('when', start.toISOString())
-    .lt('when', end.toISOString())
-    .order('when', { ascending: true });
-
-  if (error) {
-    tbody.innerHTML = `<tr><td colspan="4">${esc(error.message)}</td></tr>`;
-    return;
-  }
-
-  const revMap = new Map();
-  for (const row of (data || [])) {
-    const ym = String(row.when || '').slice(0, 7);
-    if (!String(row.status || '').toLowerCase().includes('potwier')) continue;
-    revMap.set(ym, (revMap.get(ym) || 0) + pickAmount(row));
-  }
-
-  const expMap = new Map();
-  for (const e of expensesLoad()) {
-    const ym = monthKeyFromDate(e.date);
-    if (!ym) continue;
-    expMap.set(ym, (expMap.get(ym) || 0) + (Number(e.amount) || 0));
-  }
-
-  tbody.innerHTML = '';
-  for (let i = 11; i >= 0; i -= 1) {
-    const d = new Date(Date.UTC(year, mon - 1 - i, 1));
-    const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-    const label = `${String(d.getUTCMonth() + 1).padStart(2, '0')}-${d.getUTCFullYear()}`;
-    const revenue = revMap.get(ym) || 0;
-    const expenses = expMap.get(ym) || 0;
-    const balance = revenue - expenses;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${label}</td>
-      <td>${revenue.toFixed(2)} zł</td>
-      <td>${expenses.toFixed(2)} zł</td>
-      <td><b>${balance.toFixed(2)} zł</b></td>`;
-    tbody.appendChild(tr);
-  }
-}
-
-function renderMonthlyReport() {
-  const tbody = document.getElementById('report-rows');
-  const sum = document.getElementById('report-summary');
-  if (!tbody || !sum) return;
-
-  const correction = Number(document.getElementById('report-extra-costs')?.value || 0) || 0;
-  const notes = (document.getElementById('report-notes')?.value || '').trim();
-  const { rows, summary } = reportsState;
-
-  tbody.innerHTML = '';
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="5">Brak danych dla wybranego miesiąca.</td></tr>';
-  } else {
-    for (const row of rows) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${fmtWhen(row.when)}</td>
-        <td>${esc(row.client_name || '-')}</td>
-        <td>${esc(row.service_name || '-')}</td>
-        <td>${row.calcAmount.toFixed(2)} zł</td>
-        <td>${esc(row.status || '-')}</td>`;
-      tbody.appendChild(tr);
-    }
-  }
-
-  renderExpensesRows();
-
-  if (!summary) {
-    sum.textContent = 'Wybierz miesiąc i kliknij „Przelicz podsumowanie”.';
-    return;
-  }
-
-  const totalCosts = summary.expenses + correction;
-  const profit = summary.revenue - totalCosts;
-  sum.innerHTML = `
-    Miesiąc: <b>${summary.rangeLabel}</b> • Wizyty: <b>${summary.totalCount}</b> •
-    Potwierdzone: <b>${summary.confirmedCount}</b> • Anulowane: <b>${summary.canceledCount}</b><br>
-    Przychód: <b>${summary.revenue.toFixed(2)} zł</b> • Wydatki: <b>${summary.expenses.toFixed(2)} zł</b> • Korekta: <b>${correction.toFixed(2)} zł</b> •
-    Bilans: <b>${profit.toFixed(2)} zł</b>${notes ? `<br>Notatki: ${esc(notes)}` : ''}`;
-}
-
-function buildPdfDoc() {
-  const jspdf = window.jspdf?.jsPDF;
-  if (!jspdf) throw new Error('Biblioteka jsPDF nie została załadowana.');
-  if (!reportsState.summary) throw new Error('Najpierw przelicz podsumowanie.');
-
-  const doc = new jspdf();
-  const correction = Number(document.getElementById('report-extra-costs')?.value || 0) || 0;
-  const notes = (document.getElementById('report-notes')?.value || '').trim();
-  const { rows, expenses, summary } = reportsState;
-  const totalCosts = summary.expenses + correction;
-  const profit = summary.revenue - totalCosts;
-
-  let y = 14;
-  doc.setFontSize(14);
-  doc.text('Massages & Spa Clinical', 10, y);
-  y += 6;
-  doc.text(`Raport miesięczny: ${summary.rangeLabel}`, 10, y);
-  y += 8;
-  doc.setFontSize(11);
-  doc.text(`Przychód: ${summary.revenue.toFixed(2)} zł | Wydatki: ${summary.expenses.toFixed(2)} zł | Korekta: ${correction.toFixed(2)} zł | Bilans: ${profit.toFixed(2)} zł`, 10, y, { maxWidth: 190 });
-  y += 8;
-
-  if (notes) {
-    doc.text(`Notatki: ${notes}`, 10, y, { maxWidth: 190 });
-    y += 8;
-  }
-
-  doc.setFontSize(10);
-  doc.text('Wizyty:', 10, y);
-  y += 6;
-  for (const row of rows) {
-    if (y > 280) { doc.addPage(); y = 14; }
-    const line = `${fmtWhen(row.when)} | ${row.client_name || '-'} | ${row.service_name || '-'} | ${row.calcAmount.toFixed(2)} zł | ${row.status || '-'}`;
-    doc.text(line, 10, y, { maxWidth: 190 });
-    y += 6;
-  }
-
-  if (expenses.length) {
-    if (y > 260) { doc.addPage(); y = 14; }
-    y += 4;
-    doc.text('Wydatki:', 10, y);
-    y += 6;
-    for (const e of expenses) {
-      if (y > 280) { doc.addPage(); y = 14; }
-      doc.text(`${e.date} | ${e.category} | ${(Number(e.amount) || 0).toFixed(2)} zł | ${e.note || '-'}`, 10, y, { maxWidth: 190 });
-      y += 6;
-    }
-  }
-
-  return { doc, fileName: `raport-${summary.rangeLabel}.pdf` };
-}
-
-async function refreshMonthlyReport() {
-  const month = document.getElementById('report-month')?.value;
-  if (!month) {
-    alert('Wybierz miesiąc.');
-    return;
-  }
-  reportsState = await fetchMonthlyReport(month);
-  renderMonthlyReport();
-  await renderBalanceHistory();
-}
-
-async function savePdfWithPicker() {
-  const { doc, fileName } = buildPdfDoc();
-  if (!window.showSaveFilePicker) {
-    doc.save(fileName);
-    return false;
-  }
-
-  const handle = await window.showSaveFilePicker({
-    suggestedName: fileName,
-    types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }]
-  });
-  const writable = await handle.createWritable();
-  await writable.write(doc.output('arraybuffer'));
-  await writable.close();
-  return true;
-}
-
-function initReports() {
-  const monthEl = document.getElementById('report-month');
-  if (monthEl && !monthEl.value) {
-    const d = new Date();
-    monthEl.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  }
-
-  const dateEl = document.getElementById('expense-date');
-  if (dateEl && !dateEl.value) {
-    dateEl.value = new Date().toISOString().slice(0, 10);
-  }
-
-  renderMonthlyReport();
-  refreshMonthlyReport().catch((err) => console.warn('initReports warn:', err?.message || err));
-}
-
-function addExpense() {
-  const date = document.getElementById('expense-date')?.value;
-  const category = document.getElementById('expense-category')?.value || 'Inne';
-  const amount = Number(document.getElementById('expense-amount')?.value || 0);
-  const note = (document.getElementById('expense-note')?.value || '').trim();
-
-  if (!date || !amount) {
-    alert('Podaj datę i kwotę wydatku.');
-    return false;
-  }
-
-  const list = expensesLoad();
-  list.push({ id: uid(), date, category, amount, note });
-  expensesSave(list);
-
-  document.getElementById('expense-amount').value = '';
-  document.getElementById('expense-note').value = '';
-  return true;
-}
-
-function wireReports() {
-  document.getElementById('report-refresh')?.addEventListener('click', async () => {
-    try {
-      await refreshMonthlyReport();
-    } catch (err) {
-      alert(`Błąd raportu: ${err?.message || err}`);
-    }
-  });
-
-  document.getElementById('report-download')?.addEventListener('click', async () => {
-    try {
-      const { doc, fileName } = buildPdfDoc();
-      doc.save(fileName);
-    } catch (err) {
-      alert(`Błąd PDF: ${err?.message || err}`);
-    }
-  });
-
-  document.getElementById('report-autosave')?.addEventListener('click', async () => {
-    try {
-      const saved = await savePdfWithPicker();
-      if (!saved) alert('Przeglądarka nie wspiera autozapisu bez pytania. Użyłem standardowego pobierania.');
-    } catch (err) {
-      alert(`Autzapis nieudany: ${err?.message || err}`);
-    }
-  });
-
-  document.getElementById('expense-add')?.addEventListener('click', async () => {
-    if (!addExpense()) return;
-    try {
-      await refreshMonthlyReport();
-    } catch (err) {
-      alert(`Błąd odświeżania: ${err?.message || err}`);
-    }
-  });
-
-  document.getElementById('expense-rows')?.addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-expense-del]');
-    if (!btn) return;
-    const id = btn.dataset.expenseDel;
-    const list = expensesLoad().filter((x) => x.id !== id);
-    expensesSave(list);
-    try {
-      await refreshMonthlyReport();
-    } catch (err) {
-      alert(`Błąd odświeżania: ${err?.message || err}`);
-    }
-  });
-
-  document.getElementById('report-extra-costs')?.addEventListener('input', renderMonthlyReport);
-  document.getElementById('report-notes')?.addEventListener('input', renderMonthlyReport);
-  document.getElementById('report-month')?.addEventListener('change', async () => {
-    try {
-      await refreshMonthlyReport();
-    } catch (err) {
-      alert(`Błąd raportu: ${err?.message || err}`);
-    }
-  });
-}
-
-// =============== KLIENCI ===============
-
-const CLIENTS_LS_KEY = 'adm_clients_v1';
-const CLIENTS_EXPORT_VERSION = 2;
-
-// Model klienta
-function clientNew() {
-  return {
-    id: cryptoRandId(),
-    name: '', email: '', phone: '', address: '',
-    prefs: '', allergies: '', contras: '', notes: '',
-    treatmentNotes: {} // notatki przypięte do booking_no
-  };
-}
-
-// localStorage helpers
-function clientsLoad() {
-  try {
-    const raw = localStorage.getItem(CLIENTS_LS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
-function clientsSave(list) {
-  localStorage.setItem(CLIENTS_LS_KEY, JSON.stringify(list || []));
-}
-function cryptoRandId() {
-  const a = new Uint8Array(8); (self.crypto||window.crypto).getRandomValues(a);
-  return Array.from(a).map(x=>x.toString(16).padStart(2,'0')).join('');
-}
-
-// Filtrowanie listy
-function clientsFilter(term) {
-  term = (term||'').toLowerCase();
-  const list = clientsLoad();
-  if (!term) return list;
-  return list.filter(c =>
-    (c.name||'').toLowerCase().includes(term) ||
-    (c.email||'').toLowerCase().includes(term) ||
-    (c.phone||'').toLowerCase().includes(term)
-  );
-}
-
-// Render listy klientów
-function renderClients() {
-  const tbody = document.getElementById('clients-rows');
-  const term = document.getElementById('client-search')?.value || '';
-  const list = clientsFilter(term);
-  tbody.innerHTML = '';
-  if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="5">Brak klientów</td></tr>`;
-    return;
-  }
-  for (const c of list) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${escapeHtml(c.name || '-')}</td>
-      <td>${escapeHtml(c.email || '-')}</td>
-      <td>${escapeHtml(c.phone || '-')}</td>
-      <td>-</td>
-      <td>
-        <button class="btn" data-client-edit="${c.id}">Edytuj</button>
-        <button class="btn btn-cancel" data-client-del="${c.id}">Usuń</button>
-      </td>`;
-    tbody.appendChild(tr);
-  }
-}
-
-// Modal klienta (edycja podstawowych danych)
-let CLIENT_EDIT_ID = null;
-
-function openClientModal(id) {
-  const list = clientsLoad();
-  let c = list.find(x => x.id === id);
-  if (!c) { c = clientNew(); c.id = id || c.id; list.push(c); clientsSave(list); }
-  CLIENT_EDIT_ID = c.id;
-  document.getElementById('client-modal-title').textContent = c.name || 'Nowy klient';
-  document.getElementById('c-name').value = c.name;
-  document.getElementById('c-email').value = c.email;
-  document.getElementById('c-phone').value = c.phone;
-  document.getElementById('c-address').value = c.address;
-  document.getElementById('c-prefs').value = c.prefs;
-  document.getElementById('c-allergies').value = c.allergies;
-  document.getElementById('c-contras').value = c.contras;
-  document.getElementById('c-notes').value = c.notes;
-  document.getElementById('client-modal').classList.remove('hidden');
-}
-function closeClientModal() {
-  document.getElementById('client-modal').classList.add('hidden');
-  CLIENT_EDIT_ID = null;
-}
-function readClientForm() {
-  return {
-    id: CLIENT_EDIT_ID,
-    name: document.getElementById('c-name').value.trim(),
-    email: document.getElementById('c-email').value.trim(),
-    phone: document.getElementById('c-phone').value.trim(),
-    address: document.getElementById('c-address').value.trim(),
-    prefs: document.getElementById('c-prefs').value.trim(),
-    allergies: document.getElementById('c-allergies').value.trim(),
-    contras: document.getElementById('c-contras').value.trim(),
-    notes: document.getElementById('c-notes').value.trim(),
-    treatmentNotes: clientsLoad().find(x=>x.id===CLIENT_EDIT_ID)?.treatmentNotes || {}
-  };
-}
-
-// Historia z Supabase
-async function fetchHistoryFromSupabase({ email, phone }) {
-  let q = window.sb.from('bookings_view')
-    .select('booking_no, when, service_name, status')
-    .eq('status','Potwierdzona')
-    .order('when', { ascending: false });
-
-  if (email) q = q.eq('client_email', email.toLowerCase());
-  else if (phone) q = q.eq('phone', phone);
-  else return [];
-
-  const { data, error } = await q;
-  if (error) { console.warn('history error', error); return []; }
-  return data || [];
-}
-
-// Modal HISTORIA
-let HISTORY_CURRENT_ID = null;
-
-async function openHistoryModal(clientId) {
-  const list = clientsLoad();
-  const c = list.find(x => x.id === clientId);
-  if (!c) return;
-  HISTORY_CURRENT_ID = c.id;
-  document.getElementById('history-client-name').textContent = c.name || '(bez nazwy)';
-
-  const rows = await fetchHistoryFromSupabase({ email: c.email, phone: c.phone });
-  const tbody = document.getElementById('history-rows'); tbody.innerHTML = '';
-
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="4">Brak potwierdzonych zabiegów</td></tr>';
-  } else {
-    for (const it of rows) {
-      const localNote = (c.treatmentNotes||{})[it.booking_no] || '';
-      const tr = document.createElement('tr');
-      tr.dataset.bookingNo = it.booking_no;
-      tr.innerHTML = `
-        <td>${fmtDatePL(it.when)}</td>
-        <td>${escapeHtml(it.service_name || '-')}</td>
-        <td><textarea class="treat-note" rows="2">${escapeHtml(localNote)}</textarea></td>
-        <td><button class="btn" data-hist-save="${it.booking_no}">Zapisz</button></td>`;
-      tbody.appendChild(tr);
-    }
-  }
-
-  document.getElementById('history-modal').classList.remove('hidden');
-}
-function closeHistoryModal() {
-  document.getElementById('history-modal').classList.add('hidden');
-  HISTORY_CURRENT_ID = null;
-}
-
-// Sugestie
-function openSuggestionsModal(clientId) {
-  const c = clientsLoad().find(x => x.id === clientId);
-  if (!c) return;
-  document.getElementById('suggestions-body').innerHTML = buildSuggestions(c);
-  document.getElementById('suggestions-modal').classList.remove('hidden');
-}
-function closeSuggestionsModal() {
-  document.getElementById('suggestions-modal').classList.add('hidden');
-}
-
-// Sugestie terapeutyczne
-function buildSuggestions(c) {
-  const out = [];
-  const txt = (s)=>String(s||'').toLowerCase();
-  if (txt(c.allergies).includes('olej')) out.push('Unikaj olejków zapachowych.');
-  if (txt(c.prefs).includes('mocny')) out.push('Lubi mocny masaż.');
-  if (Object.keys(c.treatmentNotes||{}).length > 3) out.push('Klient regularny – zaproponuj pakiet.');
-  if (!out.length) out.push('Brak szczególnych zaleceń.');
-  return out.join('<br>');
-}
-
-// Historia - zapis lokalnej notatki
-function wireHistoryModalHandlers() {
-  document.getElementById('history-rows')?.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-hist-save]');
-    if (!btn || !HISTORY_CURRENT_ID) return;
-    const bookingNo = btn.dataset.histSave;
-    const tr = btn.closest('tr');
-    const val = tr.querySelector('.treat-note')?.value || '';
-    const list = clientsLoad();
-    const c = list.find(x => x.id === HISTORY_CURRENT_ID);
-    c.treatmentNotes[bookingNo] = val;
-    clientsSave(list);
-    alert('Zapisano notatkę lokalną.');
-  });
-  document.getElementById('history-close')?.addEventListener('click', closeHistoryModal);
-}
-
-// Wire wszystko
-function wireClients() {
-  document.getElementById('client-search')?.addEventListener('input', renderClients);
-  document.getElementById('client-add')?.addEventListener('click', () => {
-    const c = clientNew();
-    const list = clientsLoad(); list.push(c); clientsSave(list);
-    openClientModal(c.id);
-  });
-
-  document.getElementById('clients-rows')?.addEventListener('click', (e) => {
-    const edit = e.target.closest('[data-client-edit]');
-    const del  = e.target.closest('[data-client-del]');
-    if (edit) openClientModal(edit.dataset.clientEdit);
-    if (del) {
-      if (!confirm('Usunąć klienta?')) return;
-      const list = clientsLoad().filter(x=>x.id!==del.dataset.clientDel);
-      clientsSave(list); renderClients();
-    }
-  });
-
-  document.getElementById('client-close')?.addEventListener('click', closeClientModal);
-  document.getElementById('client-save')?.addEventListener('click', () => {
-    const updated = readClientForm();
-    const list = clientsLoad();
-    const idx = list.findIndex(x=>x.id===updated.id);
-    if (idx>=0) list[idx] = updated; else list.push(updated);
-    clientsSave(list);
-    renderClients();
-    closeClientModal();
-  });
-  document.getElementById('client-delete')?.addEventListener('click', () => {
-    if (!CLIENT_EDIT_ID) return;
-    if (!confirm('Usunąć klienta?')) return;
-    const list = clientsLoad().filter(x=>x.id!==CLIENT_EDIT_ID);
-    clientsSave(list); renderClients(); closeClientModal();
-  });
-
-  document.getElementById('btn-history-modal')?.addEventListener('click', () => {
-    if (CLIENT_EDIT_ID) openHistoryModal(CLIENT_EDIT_ID);
-  });
-  document.getElementById('btn-suggestions-modal')?.addEventListener('click', () => {
-    if (CLIENT_EDIT_ID) openSuggestionsModal(CLIENT_EDIT_ID);
-  });
-  document.getElementById('suggestions-close')?.addEventListener('click', closeSuggestionsModal);
-
-  wireHistoryModalHandlers();
-}
-
-
-  (function wireSlots(){
-    $('#slot-add')?.addEventListener('click', async () => {
-      const when = $('#slot-date')?.value;
-      if (!when) { alert('Podaj datę'); return; }
-      const dt = new Date(when);
-      dt.setSeconds(0,0);
-      const m = dt.getMinutes();
-      const rounded = Math.round(m/5)*5;
-      dt.setMinutes(rounded);
-      const { error } = await window.sb.from('slots').insert({ when: dt.toISOString(), taken: false });
-      if (error) { alert(error.message); return; }
-      $('#slot-date').value = '';
-      loadSlots();
-    });
-
-    $('#slots-rows')?.addEventListener('click', async (e) => {
-      const btn = e.target.closest('[data-slot-del]'); if (!btn) return;
-      const id = btn.getAttribute('data-slot-del');
-      if (!confirm('Usunąć ten wolny termin?')) return;
-      const { error } = await window.sb.from('slots').delete().eq('id', id).eq('taken', false);
-      if (error) { alert(error.message); return; }
-      loadSlots();
-    });
-
-    $('#slot-clean')?.addEventListener('click', async () => {
-      const nowIso = new Date().toISOString();
-      const { error } = await window.sb.from('slots').delete().lt('when', nowIso).eq('taken', false);
-      if (error) { alert(error.message); return; }
-      loadSlots();
-    });
-  })();
-
-  // --- INIT ---
-document.addEventListener('DOMContentLoaded', () => {
-  hydrateSettingsForm();
-  wireLogin();
-  wireSettings();
-  wireReports();
-  window.Clients?.init();
-});
-
-/* removed legacy {fname} */
-})();
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Massages &amp; Spa Clinical — Panel Admin</title>
+  <link rel="icon" href="assets/logo.svg" />
+  <style>
+    :root { --card: #fff; --muted:#666; --bd:#e9e9e9; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; padding:20px; background:#f7f7f8; }
+    header { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    .card { background: var(--card); border:1px solid var(--bd); border-radius:14px; box-shadow: 0 6px 18px rgba(0,0,0,.04); padding:16px; }
+    .stack { display:grid; gap:12px; }
+    .hidden { display:none !important; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .toolbar input, .toolbar select { padding:8px 10px; border:1px solid var(--bd); border-radius:10px; }
+    .btn { padding:8px 12px; border:1px solid var(--bd); background:#fafafa; border-radius:10px; cursor:pointer; }
+    .btn[disabled] { opacity:.6; cursor:progress; }
+
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { padding:10px 8px; border-bottom:1px solid var(--bd); text-align:left; }
+    th { background:#fafafa; position:sticky; top:0; }
+
+    .status { padding: 2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--bd); }
+    .pending{ background:#fff8e1; }
+    .confirmed{ background:#e8f5e9; }
+    .canceled{ background:#ffebee; }
+    .muted{ color:var(--muted); }
+
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; }
+@@ -35,69 +35,74 @@
+	.btn-confirm { background:#16a34a; color:#fff; border-color:#128a3f; }
+.btn.btn-confirm { background:#16a34a !important; color:#fff !important; border-color:#128a3f !important; }
+.btn.btn-confirm:hover { filter:brightness(0.95); }
+
+.btn.btn-cancel  { background:#dc2626 !important; color:#fff !important; border-color:#b31f1f !important; }
+.btn.btn-cancel:hover  { filter:brightness(0.95); }
+
+.btn.btn-details { background:#607d8b !important; color:#fff !important; border-color:#546e7a !important; }
+.btn.btn-details:hover { filter:brightness(0.95); }
+.status { padding: 2px 8px; border-radius: 999px; font-size: 12px; color:#fff; }
+.status.pending { background:#f59e0b; }      /* bursztyn */
+.status.confirmed { background:#16a34a; }    /* zielony */
+
+
+
+
+  </style>
+
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="assets/supabase-client.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img src="assets/logo.svg" alt="" height="36" />
+      <div>
+        <h1 style="margin:0; font-size:22px;">Massages &amp; Spa Clinical</h1>
+        <p style="margin:4px 0 0; color:#6b7280;">Panel administracyjny</p>
+      </div>
+
+    </header>
+
+    <!-- PIN -->
+    <section id="pin-screen" class="card stack">
+      <div class="stack">
+        <h2 style="margin:0">Wejście</h2>
+        <label for="pin-input">PIN admina</label>
+        <input id="pin-input" type="password" inputmode="numeric" maxlength="8" placeholder="****" />
+        <button id="pin-btn" class="btn">Zaloguj</button>
+        <p id="pin-err" class="muted" style="color:#b00;"></p>
+      </div>
+    </section>
+
+    <!-- TABS -->
+    <nav class="tabs card" id="top-tabs" style="display:none">
+      <button data-tab="bookings">Rezerwacje</button>
+      <button data-tab="slots">Terminy</button>
+      <button data-tab="clients">Klienci</button>
+      <button data-tab="reports">Raporty PDF</button>
+      <button data-tab="settings">Ustawienia</button>
+    </nav>
+
+    <!-- REZERWACJE -->
+    <section id="bookings-screen" class="hidden stack">
+      <div class="toolbar row">
+        <select id="status-filter">
+          <option value="">Wszystkie statusy</option>
+          <option value="pending">Oczekujące</option>
+          <option value="confirmed">Potwierdzone</option>
+          <option value="canceled">Anulowane</option>
+        </select>
+        <input id="q" placeholder="Szukaj: klient, e-mail, tel, usługa" />
+        <input id="from" type="date" />
+        <input id="to" type="date" />
+        <button id="refresh" class="btn">Odśwież</button>
+      </div>
+
+      <div class="table-container">
+        <table class="bookings-table">
+         <thead>
+  <tr>
+    <th>Nr</th>
+    <th>Imię i nazwisko</th>
+    <th>Termin</th>
+@@ -143,109 +148,141 @@
+    </section>
+
+<!-- ============== KLIENCI ============== -->
+<section id="clients-screen" class="hidden card stack">
+  <h2>Klienci</h2>
+
+  <!-- Pasek narzędzi -->
+  <div class="row" style="gap:.5rem;flex-wrap:wrap">
+    <input id="client-search" type="search" placeholder="Szukaj: imię, e-mail, tel." />
+    <button id="client-add" class="btn">Dodaj klienta</button>
+    <button id="client-export" class="btn">Eksportuj (.enc)</button>
+    <label class="btn" for="client-import-file" style="cursor:pointer;">Importuj (.enc)</label>
+    <input id="client-import-file" type="file" accept=".enc" style="display:none" />
+  </div>
+
+  <!-- Lista klientów -->
+  <table class="bookings-table">
+    <thead>
+  <tr>
+    <th>Imię i nazwisko</th>
+    <th>Adres</th>
+    <th>Szczegóły</th>
+  </tr>
+</thead>
+<tbody id="clients-rows"></tbody>
+  </table>
+</section>
+
+
+    <!-- USTAWIENIA -->
+    <section id="reports-screen" class="hidden card stack">
+      <h2>Raport miesięczny (PDF) — Massages &amp; Spa Clinical</h2>
+      <div class="row">
+        <div class="stack">
+          <label for="report-month">Miesiąc</label>
+          <input id="report-month" type="month" />
+        </div>
+        <div class="stack">
+          <label for="report-extra-costs">Korekta kosztów (zł)</label>
+          <input id="report-extra-costs" type="number" step="0.01" value="0" />
+        </div>
+      </div>
+
+      <label for="report-notes">Notatki do raportu</label>
+      <textarea id="report-notes" rows="3" placeholder="Np. kampania, zakup sprzętu"></textarea>
+
+      <div class="card stack" style="padding:12px; background:#fafafa;">
+        <h3 style="margin:0;">Dodaj wydatek</h3>
+        <div class="row">
+          <input id="expense-date" type="date" />
+          <select id="expense-category">
+            <option value="Paliwo">Paliwo</option>
+            <option value="Kosmetyki">Kosmetyki</option>
+            <option value="Dodatki">Dodatki</option>
+            <option value="Marketing">Marketing</option>
+            <option value="Inne">Inne</option>
+          </select>
+          <input id="expense-amount" type="number" min="0" step="0.01" placeholder="Kwota" />
+          <input id="expense-note" type="text" placeholder="Opis wydatku" />
+          <button id="expense-add" class="btn">Dodaj wydatek</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="report-refresh" class="btn">Przelicz podsumowanie</button>
+        <button id="report-download" class="btn btn-confirm">Pobierz PDF</button>
+        <button id="report-autosave" class="btn">Autozapis do pliku (jeśli wspierane)</button>
+      </div>
+
+      <div id="report-summary" class="muted">Wybierz miesiąc i kliknij „Przelicz podsumowanie”.</div>
+
+      <h3 style="margin:8px 0 0;">Wizyty w miesiącu</h3>
+      <table class="bookings-table">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Klient</th>
+            <th>Usługa</th>
+            <th>Kwota</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="report-rows"></tbody>
+      </table>
+
+      <h3 style="margin:8px 0 0;">Wydatki w miesiącu</h3>
+      <table class="bookings-table">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Kategoria</th>
+            <th>Opis</th>
+            <th>Kwota</th>
+            <th>Akcje</th>
+          </tr>
+        </thead>
+        <tbody id="expense-rows"></tbody>
+      </table>
+
+      <h3 style="margin:8px 0 0;">Historia bilansu miesięcznego (12 mies.)</h3>
+      <table class="bookings-table">
+        <thead>
+          <tr>
+            <th>Miesiąc</th>
+            <th>Przychód</th>
+            <th>Wydatki</th>
+            <th>Bilans</th>
+          </tr>
+        </thead>
+        <tbody id="balance-history-rows"></tbody>
+      </table>
+    </section>
+
+    <section id="settings-screen" class="hidden card stack">
+      <h2>Ustawienia</h2>
+      <label>„Zalecenia przed zabiegiem”</label>
+      <textarea id="set-prep-text" rows="6"></textarea>
+      <div class="row">
+        <div class="stack">
+          <label>PIN</label>
+          <input id="set-pin" placeholder="np. 2505" />
+        </div>
+        <div class="stack">
+          <label>E-mail</label>
+          <input id="set-email" />
+        </div>
+        <div class="stack">
+          <label>Telefon</label>
+          <input id="set-phone" />
+        </div>
+      </div>
+      <button id="settings-save" class="btn">Zapisz ustawienia</button>
+    </section>
+  </div>
+
+<script src="assets/admin.js"></script>
+<script src="assets/clients.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+</body>
+</html>
