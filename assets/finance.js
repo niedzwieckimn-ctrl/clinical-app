@@ -14,17 +14,19 @@
       const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
       return {
         income: Array.isArray(parsed.income) ? parsed.income : [],
-        expenses: Array.isArray(parsed.expenses) ? parsed.expenses : []
+        expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
+        orders: Array.isArray(parsed.orders) ? parsed.orders : []
       };
     } catch {
-      return { income: [], expenses: [] };
+      return { income: [], expenses: [], orders: [] };
     }
   }
 
   function saveData(data) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       income: Array.isArray(data.income) ? data.income : [],
-      expenses: Array.isArray(data.expenses) ? data.expenses : []
+      expenses: Array.isArray(data.expenses) ? data.expenses : [],
+      orders: Array.isArray(data.orders) ? data.orders : []
     }));
   }
 
@@ -63,14 +65,16 @@
   function totalsForMonth(data, ym) {
     const income = filterByMonth(data.income, ym).reduce((sum, item) => sum + toAmount(item.amount), 0);
     const expenses = filterByMonth(data.expenses, ym).reduce((sum, item) => sum + toAmount(item.amount), 0);
+    const orders = filterByMonth(data.orders, ym).reduce((sum, item) => sum + toAmount(item.price), 0);
     return {
       income,
       expenses,
-      balance: income - expenses
+      orders,
+      balance: income - expenses - orders
     };
   }
 
-  function renderTableRows(tbodyId, rows, emptyText, type) {
+  function renderMoneyRows(tbodyId, rows, emptyText, type) {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
 
@@ -94,13 +98,41 @@
     `).join('');
   }
 
+  function renderOrderRows(rows) {
+    const tbody = $('#finance-orders-rows');
+    if (!tbody) return;
+
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="5">Brak zamówień w tym miesiącu.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map((item) => {
+      const link = String(item.link || '').trim();
+      const safeLink = /^https?:\/\//i.test(link) ? link : '';
+      return `
+        <tr>
+          <td>${esc(item.date)}</td>
+          <td>${esc(item.product)}</td>
+          <td>${currency(item.price)}</td>
+          <td>${safeLink ? `<a href="${safeLink}" target="_blank" rel="noopener">${esc(link)}</a>` : '-'}</td>
+          <td>
+            <button class="btn btn-cancel" data-finance-delete="${esc(item.id)}" data-finance-type="orders">
+              Usuń
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
   function renderHistory(data, selectedMonth) {
     const tbody = $('#finance-history-rows');
     if (!tbody) return;
 
     const [year, month] = selectedMonth.split('-').map(Number);
     if (!year || !month) {
-      tbody.innerHTML = '<tr><td colspan="4">Brak danych</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5">Brak danych</td></tr>';
       return;
     }
 
@@ -115,6 +147,7 @@
           <td>${esc(ym)}</td>
           <td>${currency(totals.income)}</td>
           <td>${currency(totals.expenses)}</td>
+          <td>${currency(totals.orders)}</td>
           <td><strong>${currency(totals.balance)}</strong></td>
         </tr>
       `);
@@ -131,6 +164,7 @@
     const selectedMonth = getCurrentMonthValue();
     const incomeRows = filterByMonth(data.income, selectedMonth).sort((a, b) => String(a.date).localeCompare(String(b.date)));
     const expenseRows = filterByMonth(data.expenses, selectedMonth).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const orderRows = filterByMonth(data.orders, selectedMonth).sort((a, b) => String(a.date).localeCompare(String(b.date)));
     const totals = totalsForMonth(data, selectedMonth);
 
     root.innerHTML = `
@@ -143,15 +177,19 @@
         </div>
 
         <div class="row">
-          <div class="card" style="flex:1; min-width:220px;">
+          <div class="card" style="flex:1; min-width:180px;">
             <h3 style="margin:0 0 8px;">Przychód</h3>
             <div style="font-size:28px; font-weight:700; color:#166534;">${currency(totals.income)}</div>
           </div>
-          <div class="card" style="flex:1; min-width:220px;">
+          <div class="card" style="flex:1; min-width:180px;">
             <h3 style="margin:0 0 8px;">Wydatki</h3>
             <div style="font-size:28px; font-weight:700; color:#b91c1c;">${currency(totals.expenses)}</div>
           </div>
-          <div class="card" style="flex:1; min-width:220px;">
+          <div class="card" style="flex:1; min-width:180px;">
+            <h3 style="margin:0 0 8px;">Zamówienia</h3>
+            <div style="font-size:28px; font-weight:700; color:#9a3412;">${currency(totals.orders)}</div>
+          </div>
+          <div class="card" style="flex:1; min-width:180px;">
             <h3 style="margin:0 0 8px;">Bilans</h3>
             <div style="font-size:28px; font-weight:700; color:${totals.balance >= 0 ? '#166534' : '#b91c1c'};">
               ${currency(totals.balance)}
@@ -179,6 +217,17 @@
           <input id="finance-expense-amount" type="number" step="0.01" min="0" placeholder="Kwota" />
           <input id="finance-expense-note" type="text" placeholder="Notatka" />
           <button id="finance-expense-add" class="btn">Dodaj wydatek</button>
+        </div>
+      </div>
+
+      <div class="card stack">
+        <h3 style="margin:0;">Zamówienia</h3>
+        <div class="row">
+          <input id="finance-order-date" type="date" />
+          <input id="finance-order-product" type="text" placeholder="Produkt" />
+          <input id="finance-order-price" type="number" step="0.01" min="0" placeholder="Cena" />
+          <input id="finance-order-link" type="url" placeholder="Link do sklepu" style="min-width:260px; flex:1;" />
+          <button id="finance-order-add" class="btn">Dodaj zamówienie</button>
         </div>
       </div>
 
@@ -215,6 +264,22 @@
       </div>
 
       <div class="card stack">
+        <h3 style="margin:0;">Lista zamówień w miesiącu</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Produkt</th>
+              <th>Cena</th>
+              <th>Link do sklepu</th>
+              <th>Akcje</th>
+            </tr>
+          </thead>
+          <tbody id="finance-orders-rows"></tbody>
+        </table>
+      </div>
+
+      <div class="card stack">
         <h3 style="margin:0;">Historia 12 miesięcy</h3>
         <table>
           <thead>
@@ -222,6 +287,7 @@
               <th>Miesiąc</th>
               <th>Przychód</th>
               <th>Wydatki</th>
+              <th>Zamówienia</th>
               <th>Bilans</th>
             </tr>
           </thead>
@@ -233,14 +299,16 @@
     const today = new Date().toISOString().slice(0, 10);
     $('#finance-income-date').value = today;
     $('#finance-expense-date').value = today;
+    $('#finance-order-date').value = today;
 
-    renderTableRows('finance-income-rows', incomeRows, 'Brak przychodów w tym miesiącu.', 'income');
-    renderTableRows('finance-expense-rows', expenseRows, 'Brak wydatków w tym miesiącu.', 'expenses');
+    renderMoneyRows('finance-income-rows', incomeRows, 'Brak przychodów w tym miesiącu.', 'income');
+    renderMoneyRows('finance-expense-rows', expenseRows, 'Brak wydatków w tym miesiącu.', 'expenses');
+    renderOrderRows(orderRows);
     renderHistory(data, selectedMonth);
     wireActions();
   }
 
-  function addEntry(type) {
+  function addMoneyEntry(type) {
     const isIncome = type === 'income';
     const prefix = isIncome ? 'finance-income' : 'finance-expense';
 
@@ -266,6 +334,29 @@
     render();
   }
 
+  function addOrder() {
+    const date = $('#finance-order-date')?.value || '';
+    const product = $('#finance-order-product')?.value || '';
+    const price = toAmount($('#finance-order-price')?.value || 0);
+    const link = $('#finance-order-link')?.value || '';
+
+    if (!date || !product.trim() || price <= 0) {
+      alert('Uzupełnij datę, nazwę produktu i poprawną cenę.');
+      return;
+    }
+
+    const data = loadData();
+    data.orders.push({
+      id: uid(),
+      date,
+      product: product.trim(),
+      price,
+      link: link.trim()
+    });
+    saveData(data);
+    render();
+  }
+
   function deleteEntry(type, id) {
     const data = loadData();
     data[type] = data[type].filter((item) => item.id !== id);
@@ -275,8 +366,9 @@
 
   function wireActions() {
     $('#finance-month')?.addEventListener('change', render);
-    $('#finance-income-add')?.addEventListener('click', () => addEntry('income'));
-    $('#finance-expense-add')?.addEventListener('click', () => addEntry('expenses'));
+    $('#finance-income-add')?.addEventListener('click', () => addMoneyEntry('income'));
+    $('#finance-expense-add')?.addEventListener('click', () => addMoneyEntry('expenses'));
+    $('#finance-order-add')?.addEventListener('click', addOrder);
 
     $('#finance-root')?.addEventListener('click', (event) => {
       const button = event.target.closest('[data-finance-delete]');
