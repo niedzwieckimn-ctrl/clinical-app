@@ -1,10 +1,11 @@
 /* =========================================
    Admin panel – wersja stabilna
    - PIN lokalny 2505 + opcjonalny PIN z ustawień
-   - Zakładki: Rezerwacje / Terminy / Klienci / Ustawienia
+   - Zakładki: Rezerwacje / Terminy / Klienci / Finanse / Ustawienia
    - Rezerwacje: bookings_view + Netlify Functions confirm/cancel
    - Terminy: tylko data/godzina, zaokrąglanie do 5 minut
    - Klienci: obsługiwani przez assets/clients.js
+   - Finanse: osobny moduł assets/finance.js
    - Ustawienia: localStorage (pin, prep_text, contact_*)
 ========================================= */
 
@@ -73,7 +74,7 @@
   }
 
   function showTab(name) {
-    const ids = ['bookings', 'slots', 'clients', 'settings'];
+    const ids = ['bookings', 'slots', 'clients', 'finance', 'settings'];
     for (const id of ids) {
       const el = document.getElementById(`${id}-screen`);
       if (el) el.classList.toggle('hidden', id !== name);
@@ -82,6 +83,7 @@
     if (name === 'bookings') initBookings();
     if (name === 'slots') loadSlots();
     if (name === 'clients') window.Clients?.render();
+    if (name === 'finance') window.AdminFinance?.init?.();
     if (name === 'settings') hydrateSettingsForm();
   }
 
