@@ -29,9 +29,7 @@
     .muted{ color:var(--muted); }
 
     .modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; }
-    .modal:not(.hidden) { display:flex; }
-    .modal-content { background:#fff; border-radius:10px; padding:16px; width: min(520px, 94vw); position:relative; }
-    .modal-close { position:absolute; right:10px; top:8px; cursor:pointer; font-size:22px; }
+@@ -35,69 +35,74 @@
 	.btn-confirm { background:#16a34a; color:#fff; border-color:#128a3f; }
 .btn.btn-confirm { background:#16a34a !important; color:#fff !important; border-color:#128a3f !important; }
 .btn.btn-confirm:hover { filter:brightness(0.95); }
@@ -106,45 +104,7 @@
     <th>Nr</th>
     <th>Imię i nazwisko</th>
     <th>Termin</th>
-    <th>Status</th>      <!-- ⬅ NOWE -->
-    <th>Akcje</th>
-  </tr>
-</thead>
-
-          <tbody id="rows"></tbody>
-        </table>
-      </div>
-
-      <!-- MODAL Szczegóły -->
-      <div id="details-modal" class="modal hidden">
-        <div class="modal-content">
-          <span id="close-details" class="modal-close">&times;</span>
-          <h3>Szczegóły rezerwacji</h3>
-          <div id="details-body"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- TERMINY -->
-    <section id="slots-screen" class="hidden card stack">
-      <h2>Terminy (wolne sloty)</h2>
-
-      <div class="row">
-        <input id="slot-date" type="datetime-local" step="300" />
-        <button id="slot-add" class="btn">Dodaj wolny termin</button>
-		<button id="slot-clean" class="btn">Usuń przeterminowane</button>
-      </div>
-
-      <table class="bookings-table">
-        <thead>
-          <tr>
-            <th>Data</th>
-            <th>Status</th>
-            <th>Akcje</th>
-          </tr>
-        </thead>
-        <tbody id="slots-rows"></tbody>
-      </table>
+@@ -143,109 +148,141 @@
     </section>
 
 <!-- ============== KLIENCI ============== -->
