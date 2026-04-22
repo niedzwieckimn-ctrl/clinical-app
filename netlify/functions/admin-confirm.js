@@ -80,7 +80,7 @@ export const handler = async (event) => {
 
     `;
 
-    const recipients = Array.from(new Set([
+     const recipients = Array.from(new Set([
       (booking.client_email || '').trim().toLowerCase(),
       (process.env.THERAPIST_EMAIL || '').trim().toLowerCase(),
     ].filter(Boolean)));
@@ -89,7 +89,45 @@ export const handler = async (event) => {
       await sendEmail({ to, subject, html });
     }
 
-    return json(200, { ok: true });
+    // Zaplanuj przypomnienie 24h przed wizytą (tylko do klienta)
+    let reminder = { scheduled: false };
+    const clientEmail = (booking.client_email || '').trim().toLowerCase();
+    if (clientEmail) {
+      const whenMs = new Date(booking.when).getTime();
+      const reminderAt = new Date(whenMs - (24 * 60 * 60 * 1000));
+      const nowPlus5m = Date.now() + (5 * 60 * 1000);
+      if (Number.isFinite(reminderAt.getTime()) && reminderAt.getTime() > nowPlus5m) {
+        const reminderSubject = `⏰ Przypomnienie o wizycie jutro – ${booking.service_name || 'wizyta'}`;
+        const reminderHtml = `
+          <p>Cześć ${escapeHtml(booking.client_name || '')},</p>
+          <p>to automatyczne przypomnienie o jutrzejszej wizycie.</p>
+          <p>
+            📅 <strong>Termin:</strong> ${escapeHtml(whenStr)}<br>
+            🧘‍♀️ <strong>Usługa:</strong> ${escapeHtml(booking.service_name || 'wizyta')}<br>
+            📍 <strong>Adres:</strong> ${escapeHtml(booking.address || '-')}
+          </p>
+          <p>
+            📞 Kontakt: <a href="tel:797193931">797 193 931</a> /
+            <a href="mailto:massages.n.spa@gmail.com">massages.n.spa@gmail.com</a>
+          </p>
+        `;
+
+        await sendEmail({
+          to: clientEmail,
+          subject: reminderSubject,
+          html: reminderHtml,
+          scheduledAt: reminderAt.toISOString(),
+          idempotencyKey: `reminder:${booking.booking_no}:${reminderAt.toISOString().slice(0, 16)}`,
+        });
+        reminder = { scheduled: true, scheduled_at: reminderAt.toISOString() };
+      } else {
+        reminder = { scheduled: false, reason: 'too_late_or_invalid_time' };
+      }
+    } else {
+      reminder = { scheduled: false, reason: 'missing_client_email' };
+    }
+
+    return json(200, { ok: true, reminder });
   } catch (e) {
     return json(500, { error: String(e?.message || e) });
   }
@@ -108,15 +146,24 @@ function json(status, body) {
 function escapeHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 }
-async function sendEmail({ to, subject, html, text }) {
+async function sendEmail({ to, subject, html, text, scheduledAt, idempotencyKey }) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.FROM_EMAIL || 'rezerwacje@yourdomain.test';
   if (!apiKey) throw new Error('Brak RESEND_API_KEY');
 
+  const headers = {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json'
+  };
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+
+  const payload = { from, to, subject, html, text };
+  if (scheduledAt) payload.scheduled_at = scheduledAt;
+
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to, subject, html, text })
+    headers,
+    body: JSON.stringify(payload)
   });
   if (!res.ok) {
     const out = await res.text();
