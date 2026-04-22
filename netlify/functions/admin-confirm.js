@@ -109,15 +109,16 @@ export const handler = async (event) => {
     } else if (!Number.isFinite(reminderAt.getTime()) || reminderAt.getTime() <= minAllowedTime) {
       reminder = { scheduled: false, reason: 'too_late_or_invalid_time' };
     } else {
-      const reminderSubject = `⏰ Przypomnienie o wizycie jutro – ${booking.service_name || 'wizyta'}`;
+      const reminderSubject = `⏰ Przypomnienie o wizycie- Massages & SPA – ${booking.service_name || 'wizyta'}`;
       const reminderHtml = `
-        <p>Cześć ${escapeHtml(booking.client_name || '')},</p>
-        <p>to automatyczne przypomnienie o jutrzejszej wizycie.</p>
+        <p>Dzień dobry, ${escapeHtml(booking.client_name || '')},</p>
+        <p>Przypominamy o Twojej jutrzejszej wizycie.</p>
         <p>
-          📅 <strong>Termin:</strong> ${escapeHtml(whenStr)}<br>
-          🧘‍♀️ <strong>Usługa:</strong> ${escapeHtml(booking.service_name || 'wizyta')}<br>
-          📍 <strong>Adres:</strong> ${escapeHtml(booking.address || '-')}
+           <strong>Termin:</strong> ${escapeHtml(whenStr)}<br>
+           <strong>Zabieg:</strong> ${escapeHtml(booking.service_name || 'wizyta')}<br>
+          
         </p>
+        <p> Jeśli musisz odwołać lub przełożyć spotkanie prosimy o kontakt.</p>
         <p>
           📞 Kontakt: <a href="tel:797193931">797 193 931</a> /
           <a href="mailto:massages.n.spa@gmail.com">massages.n.spa@gmail.com</a>
