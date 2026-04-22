@@ -80,7 +80,7 @@ export const handler = async (event) => {
 
     `;
 
-     const recipients = Array.from(new Set([
+         const recipients = Array.from(new Set([
       (booking.client_email || '').trim().toLowerCase(),
       (process.env.THERAPIST_EMAIL || '').trim().toLowerCase(),
     ].filter(Boolean)));
@@ -89,42 +89,55 @@ export const handler = async (event) => {
       await sendEmail({ to, subject, html });
     }
 
-    // Zaplanuj przypomnienie 24h przed wizytą (tylko do klienta)
+    // Zaplanuj przypomnienie 24h przed wizytą (klient + therapist)
     let reminder = { scheduled: false };
-    const clientEmail = (booking.client_email || '').trim().toLowerCase();
-    if (clientEmail) {
-      const whenMs = new Date(booking.when).getTime();
-      const reminderAt = new Date(whenMs - (24 * 60 * 60 * 1000));
-      const nowPlus5m = Date.now() + (5 * 60 * 1000);
-      if (Number.isFinite(reminderAt.getTime()) && reminderAt.getTime() > nowPlus5m) {
-        const reminderSubject = `⏰ Przypomnienie o wizycie jutro – ${booking.service_name || 'wizyta'}`;
-        const reminderHtml = `
-          <p>Cześć ${escapeHtml(booking.client_name || '')},</p>
-          <p>to automatyczne przypomnienie o jutrzejszej wizycie.</p>
-          <p>
-            📅 <strong>Termin:</strong> ${escapeHtml(whenStr)}<br>
-            🧘‍♀️ <strong>Usługa:</strong> ${escapeHtml(booking.service_name || 'wizyta')}<br>
-            📍 <strong>Adres:</strong> ${escapeHtml(booking.address || '-')}
-          </p>
-          <p>
-            📞 Kontakt: <a href="tel:797193931">797 193 931</a> /
-            <a href="mailto:massages.n.spa@gmail.com">massages.n.spa@gmail.com</a>
-          </p>
-        `;
+    const reminderRecipients = Array.from(new Set([
+      (booking.client_email || '').trim().toLowerCase(),
+      (process.env.THERAPIST_EMAIL || '').trim().toLowerCase(),
+    ].filter(Boolean)));
 
+    const whenMs = new Date(booking.when).getTime();
+    const testDelayMinutes = parsePositiveInt(process.env.REMINDER_TEST_DELAY_MINUTES);
+    const reminderAt = Number.isFinite(testDelayMinutes)
+      ? new Date(Date.now() + (testDelayMinutes * 60 * 1000))
+      : new Date(whenMs - (24 * 60 * 60 * 1000));
+    const nowPlus5m = Date.now() + (5 * 60 * 1000);
+
+    if (reminderRecipients.length === 0) {
+      reminder = { scheduled: false, reason: 'missing_recipients' };
+    } else if (!Number.isFinite(reminderAt.getTime()) || reminderAt.getTime() <= nowPlus5m) {
+      reminder = { scheduled: false, reason: 'too_late_or_invalid_time' };
+    } else {
+      const reminderSubject = `⏰ Przypomnienie o wizycie jutro – ${booking.service_name || 'wizyta'}`;
+      const reminderHtml = `
+        <p>Cześć ${escapeHtml(booking.client_name || '')},</p>
+        <p>to automatyczne przypomnienie o jutrzejszej wizycie.</p>
+        <p>
+          📅 <strong>Termin:</strong> ${escapeHtml(whenStr)}<br>
+          🧘‍♀️ <strong>Usługa:</strong> ${escapeHtml(booking.service_name || 'wizyta')}<br>
+          📍 <strong>Adres:</strong> ${escapeHtml(booking.address || '-')}
+        </p>
+        <p>
+          📞 Kontakt: <a href="tel:797193931">797 193 931</a> /
+          <a href="mailto:massages.n.spa@gmail.com">massages.n.spa@gmail.com</a>
+        </p>
+      `;
+
+      for (const to of reminderRecipients) {
         await sendEmail({
-          to: clientEmail,
+          to,
           subject: reminderSubject,
           html: reminderHtml,
           scheduledAt: reminderAt.toISOString(),
-          idempotencyKey: `reminder:${booking.booking_no}:${reminderAt.toISOString().slice(0, 16)}`,
+          idempotencyKey: `reminder:${booking.booking_no}:${to}:${reminderAt.toISOString().slice(0, 16)}`,
         });
-        reminder = { scheduled: true, scheduled_at: reminderAt.toISOString() };
-      } else {
-        reminder = { scheduled: false, reason: 'too_late_or_invalid_time' };
       }
-    } else {
-      reminder = { scheduled: false, reason: 'missing_client_email' };
+      reminder = {
+        scheduled: true,
+        scheduled_at: reminderAt.toISOString(),
+        recipients: reminderRecipients,
+        mode: Number.isFinite(testDelayMinutes) ? 'test_delay' : 'appointment_minus_24h',
+      };
     }
 
     return json(200, { ok: true, reminder });
@@ -145,6 +158,11 @@ function json(status, body) {
 }
 function escapeHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+function parsePositiveInt(v) {
+  const n = Number.parseInt(String(v || '').trim(), 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
 }
 async function sendEmail({ to, subject, html, text, scheduledAt, idempotencyKey }) {
   const apiKey = process.env.RESEND_API_KEY;
@@ -170,4 +188,3 @@ async function sendEmail({ to, subject, html, text, scheduledAt, idempotencyKey 
     throw new Error(`Resend error: ${out}`);
   }
 }
-
