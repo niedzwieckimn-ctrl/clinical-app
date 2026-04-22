@@ -105,8 +105,8 @@ function addDays(date, days) {
 
 function buildReminderHtml({ bookingNo, whenStr, serviceName, clientName, address }) {
   return `
-    <p>Cześć ${escapeHtml(clientName || '')},</p>
-    <p>to automatyczne przypomnienie o Twojej wizycie, która odbędzie się jutro.</p>
+    <p>Dzień dobry! ${escapeHtml(clientName || '')},</p>
+    <p>to automatyczne przypomnienie o Twojej wizycie, która odbędzie się już jutro. :)</p>
     <p>
       📅 <strong>Termin:</strong> ${escapeHtml(whenStr)}<br>
       🧘‍♀️ <strong>Usługa:</strong> ${escapeHtml(serviceName || 'wizyta')}<br>
