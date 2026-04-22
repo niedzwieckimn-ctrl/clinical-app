@@ -80,7 +80,7 @@ export const handler = async (event) => {
 
     `;
 
-         const recipients = Array.from(new Set([
+        const recipients = Array.from(new Set([
       (booking.client_email || '').trim().toLowerCase(),
       (process.env.THERAPIST_EMAIL || '').trim().toLowerCase(),
     ].filter(Boolean)));
@@ -101,11 +101,12 @@ export const handler = async (event) => {
     const reminderAt = Number.isFinite(testDelayMinutes)
       ? new Date(Date.now() + (testDelayMinutes * 60 * 1000))
       : new Date(whenMs - (24 * 60 * 60 * 1000));
-    const nowPlus5m = Date.now() + (5 * 60 * 1000);
+    const minimumLeadMs = Number.isFinite(testDelayMinutes) ? (60 * 1000) : (5 * 60 * 1000);
+    const minAllowedTime = Date.now() + minimumLeadMs;
 
     if (reminderRecipients.length === 0) {
       reminder = { scheduled: false, reason: 'missing_recipients' };
-    } else if (!Number.isFinite(reminderAt.getTime()) || reminderAt.getTime() <= nowPlus5m) {
+    } else if (!Number.isFinite(reminderAt.getTime()) || reminderAt.getTime() <= minAllowedTime) {
       reminder = { scheduled: false, reason: 'too_late_or_invalid_time' };
     } else {
       const reminderSubject = `⏰ Przypomnienie o wizycie jutro – ${booking.service_name || 'wizyta'}`;
@@ -188,3 +189,4 @@ async function sendEmail({ to, subject, html, text, scheduledAt, idempotencyKey 
     throw new Error(`Resend error: ${out}`);
   }
 }
+
