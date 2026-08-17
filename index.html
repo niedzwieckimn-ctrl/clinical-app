@@ -32,7 +32,7 @@
       <nav id="top-tabs" class="side-nav" aria-label="Główna nawigacja">
         <button data-tab="dashboard" class="active"><i data-icon="home"></i><span>Pulpit</span></button>
         <button data-tab="bookings"><i data-icon="calendar-check"></i><span>Rezerwacje</span></button>
-        <button data-tab="slots"><i data-icon="calendar"></i><span>Kalendarz i terminy</span></button>
+        <button data-tab="slots"><i data-icon="calendar"></i><span>Terminy</span></button>
         <button data-tab="clients"><i data-icon="users"></i><span>Klienci</span></button>
         <button data-tab="finance"><i data-icon="wallet"></i><span>Finanse</span></button>
         <button data-tab="settings"><i data-icon="settings"></i><span>Ustawienia</span></button>
@@ -41,6 +41,8 @@
     </aside>
 
     <main class="main-content">
+      <img class="botanical botanical-top" src="assets/botanical.svg" alt="" aria-hidden="true">
+      <img class="botanical botanical-bottom" src="assets/botanical.svg" alt="" aria-hidden="true">
       <header class="page-header">
         <div><p id="today-label" class="eyebrow"></p><h1 id="page-title">Dzień dobry, Marzena</h1><p id="page-subtitle" class="muted">Twój dzień w jednym spokojnym miejscu.</p></div>
         <button class="btn primary new-booking" data-tab-target="slots"><span>＋</span> Dodaj termin</button>
@@ -100,7 +102,7 @@
       <section id="settings-screen" class="screen hidden"><div class="screen-heading"><div><p class="eyebrow">Personalizacja</p><h2>Ustawienia</h2></div></div><div class="paper-panel settings-form"><label>„Zalecenia przed zabiegiem”<textarea id="set-prep-text" rows="6"></textarea></label><div class="form-three"><label>PIN<input id="set-pin" inputmode="numeric"></label><label>E-mail<input id="set-email" type="email"></label><label>Telefon<input id="set-phone" type="tel"></label></div><button id="settings-save" class="btn primary">Zapisz ustawienia</button></div></section>
     </main>
 
-    <nav class="mobile-nav" aria-label="Nawigacja mobilna"><button data-tab-target="dashboard" class="active"><i data-icon="home"></i><span>Pulpit</span></button><button data-tab-target="slots"><i data-icon="calendar"></i><span>Kalendarz</span></button><button class="mobile-add" data-tab-target="slots" data-focus-availability="true" aria-label="Dodaj termin">＋</button><button data-tab-target="clients"><i data-icon="users"></i><span>Klienci</span></button><button data-tab-target="settings"><i data-icon="more"></i><span>Więcej</span></button></nav>
+    <nav class="mobile-nav" aria-label="Nawigacja mobilna"><button data-tab-target="dashboard" class="active"><i data-icon="home"></i><span>Pulpit</span></button><button data-tab-target="finance"><i data-icon="wallet"></i><span>Finanse</span></button><button class="mobile-add" data-tab-target="slots" data-focus-availability="true" aria-label="Dodaj termin">＋</button><button data-tab-target="clients"><i data-icon="users"></i><span>Klienci</span></button><button data-tab-target="settings"><i data-icon="more"></i><span>Więcej</span></button></nav>
   </div>
 
   <div id="details-modal" class="modal hidden" role="dialog" aria-modal="true"><div class="modal-content"><button id="close-details" class="modal-close" aria-label="Zamknij">×</button><p class="eyebrow">Rezerwacja</p><h2>Szczegóły wizyty</h2><div id="details-body"></div><div id="details-actions" class="modal-actions"></div></div></div>
