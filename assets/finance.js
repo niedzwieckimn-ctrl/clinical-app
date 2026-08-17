@@ -242,6 +242,28 @@
       : '<span style="color:#b45309;font-weight:600;">Tryb lokalny: brak połączenia z tabelą finance_entries</span>';
   }
 
+  function financeChart(incomeRows, expenseRows) {
+    const daily = new Map();
+    const add = (rows, key) => rows.forEach(item => {
+      const day = String(item.date || '').slice(8, 10);
+      if (!day) return;
+      const entry = daily.get(day) || { income: 0, expenses: 0 };
+      entry[key] += toAmount(item.amount);
+      daily.set(day, entry);
+    });
+    add(incomeRows, 'income');
+    add(expenseRows, 'expenses');
+    const points = [...daily.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    if (!points.length) return '<div class="finance-chart-empty">Wykres pojawi się po dodaniu pierwszego przychodu lub wydatku.</div>';
+    const max = Math.max(1, ...points.flatMap(([, value]) => [value.income, value.expenses]));
+    return `<div class="finance-chart" aria-label="Wykres przychodów i wydatków w wybranym miesiącu">
+      ${points.map(([day, value]) => `<div class="finance-chart-day" title="${day}: przychody ${currency(value.income)}, wydatki ${currency(value.expenses)}">
+        <div class="finance-bars"><i class="finance-bar income" style="height:${Math.max(value.income ? 4 : 0, value.income / max * 100)}%"></i><i class="finance-bar expense" style="height:${Math.max(value.expenses ? 4 : 0, value.expenses / max * 100)}%"></i></div>
+        <small>${day}</small>
+      </div>`).join('')}
+    </div><div class="finance-chart-legend"><span><i class="dot free"></i>Przychody</span><span><i class="dot blocked"></i>Wydatki</span></div>`;
+  }
+
   function render() {
     const root = $('#finance-root');
     if (!root) return;
@@ -282,6 +304,10 @@
               ${currency(totals.balance)}
             </div>
           </div>
+        </div>
+        <div class="finance-chart-wrap">
+          <div class="section-heading" style="padding:0 0 12px;"><div><p class="eyebrow">Przepływy dzienne</p><h3 style="margin:0;">Przychody i wydatki</h3></div></div>
+          ${financeChart(incomeRows, expenseRows)}
         </div>
       </div>
 
