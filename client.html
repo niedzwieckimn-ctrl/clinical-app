@@ -1,78 +1,61 @@
 <!doctype html>
 <html lang="pl">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Szczegóły klienta</title>
-  <link rel="stylesheet" href="assets/style.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f6f1eb">
+  <title>Szczegóły klienta — Massages &amp; Spa Clinical</title>
+  <link rel="stylesheet" href="assets/style.css">
 </head>
-	<style>
-.cd-section { display: none; }
-.cd-section:not(.hidden) { display: block; }
-</style>
+<body class="client-page">
+  <img class="client-botanical client-botanical-top" src="assets/botanical.svg" alt="" aria-hidden="true">
+  <img class="client-botanical client-botanical-bottom" src="assets/botanical.svg" alt="" aria-hidden="true">
+  <main class="client-shell">
+    <header class="client-header">
+      <div class="client-brand"><img src="assets/logo.svg" alt=""><span>Massages &amp; Spa<small>Clinical</small></span></div>
+      <button id="cd-btn-back" class="btn ghost client-close">← Wróć do klientów</button>
+    </header>
 
-<body>
-  <div class="container">
-    <h1 id="cd-title" class="mb-3">Szczegóły klienta</h1>
+    <section class="client-hero">
+      <div class="client-avatar-large" aria-hidden="true">K</div>
+      <div><p class="eyebrow">Karta klienta</p><h1 id="cd-title">Szczegóły klienta</h1><p class="muted">Historia wizyt, informacje kontaktowe i indywidualne notatki.</p></div>
+    </section>
 
-    <div class="mb-3" style="display:flex;gap:8px;flex-wrap:wrap">
-	  <button id="cd-btn-upcoming" class="btn">Nadchodzące zabiegi</button>
-      <button id="cd-btn-suggestions" class="btn">Sugestie</button>
-      <button id="cd-btn-history" class="btn">Historia zabiegów</button>
-      <button id="cd-btn-contact" class="btn">Dane kontaktowe</button>
-      <button id="cd-btn-notes" class="btn">Notatki</button>
-      <button id="cd-btn-back" class="btn btn-cancel">Zamknij</button>
-    </div>
+    <nav class="client-tabs" aria-label="Sekcje klienta">
+      <button id="cd-btn-upcoming" class="active"><span>Nadchodzące</span></button>
+      <button id="cd-btn-suggestions"><span>Sugestie</span></button>
+      <button id="cd-btn-history"><span>Historia zabiegów</span></button>
+      <button id="cd-btn-contact"><span>Dane kontaktowe</span></button>
+      <button id="cd-btn-notes"><span>Notatki</span></button>
+    </nav>
 
-    <div id="cd-section-suggestions" class="cd-section"></div>
+    <div class="client-content paper-panel">
+      <div id="cd-section-suggestions" class="cd-section hidden"></div>
 
-    <div id="cd-section-upcoming" class="cd-section hidden">
-      <table class="table">
-        <thead>
-  <tr>
-    <th>Termin</th>
-    <th>Usługa</th>
-    <th>Status</th>
-    <th>Uwagi</th>
-  </tr>
-</thead>
-
-        <tbody id="cd-upcoming-rows"></tbody>
-      </table>
-    </div>
-
-    <div id="cd-section-history" class="cd-section hidden">
-      <table class="table">
-        <thead><tr><th>Termin</th><th>Usługa</th><th>Status</th></tr></thead>
-        <tbody id="cd-history-rows"></tbody>
-      </table>
-    </div>
-
-    <div id="cd-section-contact" class="cd-section hidden">
-      <p><b>E-mail:</b> <span id="cd-email">-</span></p>
-      <p><b>Telefon:</b> <span id="cd-phone">-</span></p>
-      <p><b>Adres:</b> <span id="cd-address">-</span></p>
-    </div>
-
-    <div id="cd-section-notes" class="cd-section hidden">
-      <div class="grid" style="gap:8px">
-        <label>Preferencje <textarea id="cd-prefs" rows="2"></textarea></label>
-        <label>Alergie <textarea id="cd-allergies" rows="2"></textarea></label>
-        <label>Przeciwwskazania <textarea id="cd-contras" rows="2"></textarea></label>
-        <label>Notatki <textarea id="cd-notes" rows="3"></textarea></label>
+      <div id="cd-section-upcoming" class="cd-section">
+        <div class="client-section-heading"><div><p class="eyebrow">Terminarz</p><h2>Nadchodzące zabiegi</h2></div></div>
+        <div class="client-table-wrap"><table class="client-table"><thead><tr><th>Termin</th><th>Usługa</th><th>Status</th><th>Uwagi</th></tr></thead><tbody id="cd-upcoming-rows"></tbody></table></div>
       </div>
-      <div class="mt-2"><button id="cd-save" class="btn">Zapisz</button></div>
+
+      <div id="cd-section-history" class="cd-section hidden">
+        <div class="client-section-heading"><div><p class="eyebrow">Archiwum</p><h2>Historia zabiegów</h2></div></div>
+        <div class="client-table-wrap"><table class="client-table"><thead><tr><th>Termin</th><th>Usługa</th><th>Status</th><th>Notatka</th></tr></thead><tbody id="cd-history-rows"></tbody></table></div>
+      </div>
+
+      <div id="cd-section-contact" class="cd-section hidden">
+        <div class="client-section-heading"><div><p class="eyebrow">Kontakt</p><h2>Dane klienta</h2></div></div>
+        <div class="contact-grid"><div><small>E-mail</small><strong id="cd-email">—</strong></div><div><small>Telefon</small><strong id="cd-phone">—</strong></div><div><small>Adres</small><strong id="cd-address">—</strong></div></div>
+      </div>
+
+      <div id="cd-section-notes" class="cd-section hidden">
+        <div class="client-section-heading"><div><p class="eyebrow">Indywidualna opieka</p><h2>Notatki o kliencie</h2></div></div>
+        <div class="client-notes-grid"><label>Preferencje<textarea id="cd-prefs" rows="3"></textarea></label><label>Alergie<textarea id="cd-allergies" rows="3"></textarea></label><label>Przeciwwskazania<textarea id="cd-contras" rows="3"></textarea></label><label>Notatki<textarea id="cd-notes" rows="4"></textarea></label></div>
+        <button id="cd-save" class="btn primary">Zapisz notatki</button>
+      </div>
     </div>
-  </div>
-<!-- 1) SUPABASE CDN (UMD) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-
-<!-- 2) Twój inicjalizator (ustawia window.sb) -->
-<script src="assets/supabase-client.js"></script>
-
-<!-- 3) Logika widoku klienta -->
-<script src="assets/client-details.js"></script>
-  <!-- Logika tej strony -->
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="assets/supabase-client.js"></script>
   <script src="assets/client-details.js"></script>
 </body>
 </html>
