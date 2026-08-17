@@ -32,7 +32,7 @@
       <nav id="top-tabs" class="side-nav" aria-label="Główna nawigacja">
         <button data-tab="dashboard" class="active"><i data-icon="home"></i><span>Pulpit</span></button>
         <button data-tab="bookings"><i data-icon="calendar-check"></i><span>Rezerwacje</span></button>
-        <button data-tab="slots"><i data-icon="calendar"></i><span>Terminy</span></button>
+        <button data-tab="slots"><i data-icon="calendar"></i><span>Dodaj termin</span></button>
         <button data-tab="clients"><i data-icon="users"></i><span>Klienci</span></button>
         <button data-tab="finance"><i data-icon="wallet"></i><span>Finanse</span></button>
         <button data-tab="settings"><i data-icon="settings"></i><span>Ustawienia</span></button>
@@ -82,10 +82,9 @@
       </section>
 
       <section id="slots-screen" class="screen hidden">
-        <div class="screen-heading"><div><p class="eyebrow">Dostępność</p><h2>Kalendarz i terminy</h2></div></div>
         <div class="slots-layout">
           <form id="availability-form" class="paper-panel availability-form">
-            <div class="section-heading"><div><p class="eyebrow">Nowy zakres</p><h2>Dodaj dostępność</h2></div></div>
+            <div class="section-heading"><div><p class="eyebrow">Nowy termin</p><h2>Data i godzina</h2></div></div>
             <label>Data<input id="slot-day" type="date" required></label>
             <label>Godzina<select id="slot-time"></select></label>
             <label>Powtarzanie<select id="slot-repeat"><option value="once">Tylko ten dzień</option><option value="weekly">Co tydzień (4 tygodnie)</option><option value="weekdays">Poniedziałek–piątek</option><option value="custom">Wybrane dni tygodnia</option></select></label>
