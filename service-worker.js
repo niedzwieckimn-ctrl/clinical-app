@@ -1,4 +1,4 @@
-const CACHE='clinical-spa-v4';
+const CACHE='clinical-spa-v5';
 const CORE=['/','/index.html','/assets/style.css','/assets/admin.js','/assets/logo.svg','/manifest.webmanifest','/assets/icons/icon-v3-192.png','/assets/icons/icon-v3-512.png','/assets/icons/maskable-v3-512.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
