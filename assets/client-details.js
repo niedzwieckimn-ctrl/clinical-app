@@ -474,6 +474,15 @@ document.getElementById('sg-detailed')?.addEventListener('change', async (e)=>{
     ];
     ids.forEach(x => document.getElementById(x)?.classList.add('hidden'));
     document.getElementById(id)?.classList.remove('hidden');
+    const activeButton = {
+      'cd-section-upcoming': 'cd-btn-upcoming',
+      'cd-section-suggestions': 'cd-btn-suggestions',
+      'cd-section-history': 'cd-btn-history',
+      'cd-section-contact': 'cd-btn-contact',
+      'cd-section-notes': 'cd-btn-notes'
+    }[id];
+    ['cd-btn-upcoming','cd-btn-suggestions','cd-btn-history','cd-btn-contact','cd-btn-notes']
+      .forEach(buttonId => document.getElementById(buttonId)?.classList.toggle('active', buttonId === activeButton));
   }
 
   // ===== LOAD CLIENT =====
@@ -486,6 +495,8 @@ document.getElementById('sg-detailed')?.addEventListener('change', async (e)=>{
 
   // Header + kontakt na starcie
   $('#cd-title').textContent = client.name || 'Szczegóły klienta';
+  const avatar = document.querySelector('.client-avatar-large');
+  if (avatar) avatar.textContent = String(client.name || 'K').trim().charAt(0).toUpperCase() || 'K';
   $('#cd-email').textContent = client.email || '-';
   $('#cd-phone').textContent = client.phone || '-';
   $('#cd-address').textContent = client.address || '-';
