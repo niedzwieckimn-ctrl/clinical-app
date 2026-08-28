@@ -1,5 +1,6 @@
 // netlify/functions/admin-confirm.js
 import { requireAdmin } from './_auth.js';
+import { spaEmail } from './_spa-email.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -53,41 +54,19 @@ export const handler = async (event) => {
 });
 
 
-    const contactPhone = process.env.CONTACT_PHONE || '729 979 396';
-    const contactPhoneHref = contactPhone.replace(/[^+\d]/g, '');
-    const contactEmail = process.env.CONTACT_EMAIL || 'massages.n.spa@gmail.com';
     const subject = `✅ Rezerwacja potwierdzona! – ${booking.service_name || 'wizyta'}`;
-    const html = `
-  <p>Dziękujemy za dokonanie rezerwacji w <strong>Massages &amp; SPA</strong>.</p>
-
-  <p>
-  📅 <strong>Termin:</strong> ${escapeHtml(whenStr)}<br>
-  🧘‍♀️ <strong>Usługa:</strong> ${escapeHtml(booking.service_name || 'wizyta')}<br>
-  📍 <strong>Adres:</strong> ${escapeHtml(booking.address)}
-  </p>
-
-  <p>Aby masaż przebiegł komfortowo i sprawnie, prosimy o przygotowanie się według poniższych wskazówek:</p>
-
-  <ul>
-    <li>🛋 <strong>Przygotuj przestrzeń</strong> — najlepiej ok. 2 × 3 m wolnego miejsca, aby można było ustawić stół i swobodnie się poruszać.</li>
-    <li>🪄 <strong>Zadbaj o ciepło</strong> — pomieszczenie powinno być przyjemnie nagrzane (ok. 23–25 °C), aby ciało nie marzło podczas masażu.</li>
-    <li>🌿 <strong>Zapewnij dostęp do gniazdka</strong> — jeśli używamy podgrzewacza lub lampy, przyda się prąd w pobliżu miejsca masażu.</li>
-    <li>🧼 <strong>Prysznic przed masażem</strong> — najlepiej ok. 1–2 godziny wcześniej.</li>
-    <li>🥗 <strong>Nie jedz ciężkich posiłków</strong> tuż przed zabiegiem (odczekaj 1,5–2 godziny).</li>
-    <li>💧 <strong>Wypij szklankę wody</strong> przed wizytą — wspiera to proces regeneracji organizmu.</li>
-    <li>🐾 <strong>Zwierzęta domowe</strong> — jeśli to możliwe, zadbaj, aby podczas masażu nie wchodziły do pokoju.</li>
-  </ul>
-
-  <p>
-  📞 W razie zmian lub pytań prosimy o kontakt:<br>
-  tel. <a href="tel:${escapeHtml(contactPhoneHref)}">${escapeHtml(contactPhone)}</a><br>
-  e-mail: <a href="mailto:${escapeHtml(contactEmail)}">${escapeHtml(contactEmail)}</a>
-  </p>
-
-  <p>Do zobaczenia w Twoim domu!<br>
-  Zespół <strong>Massages &amp; SPA</strong></p>
-
-    `;
+    const html = spaEmail({
+      heading: 'Rezerwacja potwierdzona',
+      intro: 'Dziękujemy za dokonanie rezerwacji. Poniżej znajdziesz termin, adres i wskazówki organizacyjne.',
+      rows: [
+        { label: 'Termin', value: whenStr },
+        { label: 'Zabieg', value: booking.service_name || 'wizyta' },
+        { label: 'Klient', value: booking.client_name || '-' },
+        { label: 'Adres', value: booking.address },
+        { label: 'Numer', value: booking.booking_no || '-' }
+      ],
+      preparation: true
+    });
 
         const recipients = Array.from(new Set([
       (booking.client_email || '').trim().toLowerCase(),
@@ -119,20 +98,17 @@ export const handler = async (event) => {
       reminder = { scheduled: false, reason: 'too_late_or_invalid_time' };
     } else {
       const reminderSubject = `⏰ Przypomnienie o wizycie- Massages & SPA – ${booking.service_name || 'wizyta'}`;
-      const reminderHtml = `
-        <p>Dzień dobry, ${escapeHtml(booking.client_name || '')},</p>
-        <p>Przypominamy o Twojej jutrzejszej wizycie.</p>
-        <p>
-           <strong>Termin:</strong> ${escapeHtml(whenStr)}<br>
-           <strong>Zabieg:</strong> ${escapeHtml(booking.service_name || 'wizyta')}<br>
-          
-        </p>
-        <p> Jeśli musisz odwołać lub przełożyć spotkanie prosimy o kontakt.</p>
-        <p>
-          📞 Kontakt: <a href="tel:${escapeHtml(contactPhoneHref)}">${escapeHtml(contactPhone)}</a> /
-          <a href="mailto:${escapeHtml(contactEmail)}">${escapeHtml(contactEmail)}</a>
-        </p>
-      `;
+      const reminderHtml = spaEmail({
+        heading: 'Przypomnienie o jutrzejszej wizycie',
+        intro: 'Przygotuj ciepłe miejsce i zadbaj o swobodny dostęp do przestrzeni, w której odbędzie się zabieg.',
+        rows: [
+          { label: 'Termin', value: whenStr },
+          { label: 'Zabieg', value: booking.service_name || 'wizyta' },
+          { label: 'Klient', value: booking.client_name || '-' },
+          { label: 'Adres', value: booking.address },
+          { label: 'Numer', value: booking.booking_no || '-' }
+        ]
+      });
 
       for (const to of reminderRecipients) {
         await sendEmail({

@@ -1,5 +1,6 @@
 // netlify/functions/admin-cancel.js
 import { requireAdmin } from './_auth.js';
+import { spaEmail } from './_spa-email.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -65,15 +66,17 @@ try {
     // 3) E-mail — ta sama treść do klienta i masażystki
     const whenStr = new Date(booking.when).toLocaleString('pl-PL', { dateStyle: 'full', timeStyle: 'short' });
     const subject = `❌ Rezerwacja anulowana – ${booking.service_name || 'wizyta'}`;
-    const html = `
-      <h2>Rezerwacja anulowana</h2>
-      <p><b>Nr:</b> ${escapeHtml(booking.booking_no || '')}</p>
-      <p><b>Klient:</b> ${escapeHtml(booking.client_name || '-')}</p>
-      <p><b>Data:</b> ${escapeHtml(whenStr)}</p>
-      <p><b>Usługa:</b> ${escapeHtml(booking.service_name || '-')}</p>
-      <p><b>Adres:</b> ${escapeHtml(booking.address || '-')}</p>
-      <p>W razie pytań prosimy o kontakt z recepcją.</p>
-    `;
+    const html = spaEmail({
+      heading: 'Rezerwacja anulowana',
+      intro: 'Rezerwacja została anulowana. Jeśli zechcesz, możesz wybrać nowy dogodny termin.',
+      rows: [
+        { label: 'Termin', value: whenStr },
+        { label: 'Zabieg', value: booking.service_name || 'wizyta' },
+        { label: 'Klient', value: booking.client_name || '-' },
+        { label: 'Adres', value: booking.address || '-' },
+        { label: 'Numer', value: booking.booking_no || '-' }
+      ]
+    });
 
     let recipients = Array.from(new Set([
       (booking.client_email || '').trim().toLowerCase(),

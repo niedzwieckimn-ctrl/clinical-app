@@ -1,4 +1,5 @@
 import { adminClient, response } from './_auth.js';
+import { spaEmail } from './_spa-email.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const clean = (value, max) => String(value || '').trim().slice(0, max);
@@ -54,7 +55,19 @@ const escapeHtml = value => String(value || '').replace(/&/g,'&amp;').replace(/<
 async function sendNotification({ booking, input, slot, service }) {
   if (!process.env.RESEND_API_KEY || !process.env.THERAPIST_EMAIL) return;
   const when = slot?.when ? new Date(slot.when).toLocaleString('pl-PL', { timeZone:'Europe/Warsaw', dateStyle:'full', timeStyle:'short' }) : '-';
-  const message = `<h2>Nowa rezerwacja</h2><p><b>Nr:</b> ${escapeHtml(booking?.booking_no)}</p><p><b>Termin:</b> ${escapeHtml(when)}</p><p><b>Zabieg:</b> ${escapeHtml(service?.name)}</p><p><b>Klient:</b> ${escapeHtml(input.name)}</p><p><b>Adres:</b> ${escapeHtml(input.address||'-')}</p><p><b>Telefon:</b> ${escapeHtml(input.phone)}</p><p><b>E-mail:</b> ${escapeHtml(input.email)}</p><p><b>Uwagi:</b> ${escapeHtml(input.notes||'-')}</p>`;
+  const message = spaEmail({
+    heading: 'Nowa rezerwacja',
+    intro: 'Pojawiła się nowa rezerwacja oczekująca na Twoje potwierdzenie.',
+    rows: [
+      { label: 'Termin', value: when },
+      { label: 'Zabieg', value: service?.name || 'wizyta' },
+      { label: 'Klient', value: input.name },
+      { label: 'Adres', value: input.address },
+      { label: 'Kontakt', value: `${input.phone} · ${input.email}` },
+      { label: 'Numer', value: booking?.booking_no || '-' }
+    ],
+    note: input.notes
+  });
   const sent = await fetch('https://api.resend.com/emails', { method:'POST', headers:{ Authorization:`Bearer ${process.env.RESEND_API_KEY}`,'Content-Type':'application/json' }, body:JSON.stringify({ from:process.env.FROM_EMAIL,to:[process.env.THERAPIST_EMAIL],subject:`Nowa rezerwacja #${booking?.booking_no||''}`,html:message }) });
   if (!sent.ok) throw new Error(`Resend ${sent.status}`);
 }

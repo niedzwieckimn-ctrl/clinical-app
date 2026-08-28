@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { spaEmail } from './_spa-email.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -106,25 +107,17 @@ function addDays(date, days) {
 }
 
 function buildReminderHtml({ bookingNo, whenStr, serviceName, clientName, address }) {
-  const contactPhone = process.env.CONTACT_PHONE || '729 979 396';
-  const contactPhoneHref = contactPhone.replace(/[^+\d]/g, '');
-  const contactEmail = process.env.CONTACT_EMAIL || 'massages.n.spa@gmail.com';
-  return `
-    <p>Dzień dobry! ${escapeHtml(clientName || '')},</p>
-    <p>to automatyczne przypomnienie o Twojej wizycie, która odbędzie się już jutro. :)</p>
-    <p>
-      📅 <strong>Termin:</strong> ${escapeHtml(whenStr)}<br>
-      🧘‍♀️ <strong>Usługa:</strong> ${escapeHtml(serviceName || 'wizyta')}<br>
-      🧾 <strong>Numer rezerwacji:</strong> ${escapeHtml(bookingNo || '-')}<br>
-      📍 <strong>Adres:</strong> ${escapeHtml(address || '-')}
-    </p>
-    <p>W razie potrzeby zmiany terminu skontaktuj się z nami jak najszybciej.</p>
-    <p>
-      📞 tel. <a href="tel:${escapeHtml(contactPhoneHref)}">${escapeHtml(contactPhone)}</a><br>
-      ✉️ e-mail: <a href="mailto:${escapeHtml(contactEmail)}">${escapeHtml(contactEmail)}</a>
-    </p>
-    <p>Do zobaczenia!<br>Zespół <strong>Massages &amp; SPA</strong></p>
-  `;
+  return spaEmail({
+    heading: 'Przypomnienie o jutrzejszej wizycie',
+    intro: 'Przygotuj ciepłe miejsce i zadbaj o swobodny dostęp do przestrzeni, w której odbędzie się zabieg.',
+    rows: [
+      { label: 'Termin', value: whenStr },
+      { label: 'Zabieg', value: serviceName || 'wizyta' },
+      { label: 'Klient', value: clientName || '-' },
+      { label: 'Adres', value: address || '-' },
+      { label: 'Numer', value: bookingNo || '-' }
+    ]
+  });
 }
 
 function adminClient() {
