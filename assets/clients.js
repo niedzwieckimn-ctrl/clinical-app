@@ -17,13 +17,12 @@
   };
 
   // ---------- STORAGE ----------
-  const CLIENTS_LS_KEY = 'adm_clients_v1';
+  let clientsMemory = [];
   function clientsLoad() {
-    try { return JSON.parse(localStorage.getItem(CLIENTS_LS_KEY)) || []; }
-    catch { return []; }
+    return clientsMemory;
   }
   function clientsSave(list) {
-    localStorage.setItem(CLIENTS_LS_KEY, JSON.stringify(list || []));
+    clientsMemory = Array.isArray(list) ? list : [];
   }
 
   // ---------- MODEL ----------
@@ -169,36 +168,19 @@
     ).join('') || '<tr><td colspan="3">Brak danych</td></tr>';
   }
 
-  // ---------- SYNC (Supabase -> localStorage) ----------
+  // ---------- SYNC (Supabase -> pamięć bieżącej sesji) ----------
   async function sync() {
     const { data, error } = await window.sb
-      .from('bookings_view')
-      .select('client_name, client_email, phone, address')
-      .eq('status', 'Potwierdzona');
+      .from('clients')
+      .select('id,name,email,phone,address,prefs,allergies,contras,notes,treatment_notes')
+      .order('name');
 
     if (error) {
       console.warn('[clients.sync] error:', error);
       return;
     }
 
-    const map = new Map();
-    for (const b of (data || [])) {
-      const key = (b.client_email || b.phone || '').trim().toLowerCase();
-      if (!key) continue;
-      if (!map.has(key)) {
-        map.set(key, {
-          id: key,
-          name: b.client_name || '',
-          email: b.client_email || '',
-          phone: b.phone || '',
-          address: b.address || '',
-          prefs: '', allergies: '', contras: '', notes: '',
-          treatmentNotes: {}
-        });
-      }
-    }
-    const list = Array.from(map.values());
-    if (list.length) clientsSave(list);
+    clientsSave((data || []).map(c => ({...c,treatmentNotes:c.treatment_notes||{}})));
   }
 
   // ---------- WIĄZANIA UI ----------
@@ -212,8 +194,8 @@ $('#clients-rows')?.addEventListener('click', (e) => {
   const details = e.target.closest('[data-client-details]');
   if (!details) return;
   const id = details.dataset.clientDetails;
-  // otwórz nowe okno/zakładkę
-  window.open('client.html?id=' + encodeURIComponent(id), '_blank', 'noopener');
+  // ta sama karta zachowuje prawidłową historię przeglądarki/PWA
+  window.location.href = 'client.html?id=' + encodeURIComponent(id);
 });
 
 
@@ -245,7 +227,7 @@ $('#clients-rows')?.addEventListener('click', (e) => {
       showSection('cd-section-notes');
     });
 
-    $('#cd-save')?.addEventListener('click', () => {
+    $('#cd-save')?.addEventListener('click', async () => {
       if (!CURRENT_CLIENT_ID) return;
       const list = clientsLoad();
       const idx = list.findIndex(x => x.id === CURRENT_CLIENT_ID);
@@ -255,6 +237,8 @@ $('#clients-rows')?.addEventListener('click', (e) => {
       c.allergies = $('#cd-allergies')?.value || '';
       c.contras   = $('#cd-contras')?.value || '';
       c.notes     = $('#cd-notes')?.value || '';
+      const {error}=await window.sb.from('clients').update({prefs:c.prefs,allergies:c.allergies,contras:c.contras,notes:c.notes}).eq('id',c.id);
+      if(error){alert(`Nie zapisano: ${error.message}`);return}
       clientsSave(list);
       alert('Zapisano notatki/ustawienia.');
     });

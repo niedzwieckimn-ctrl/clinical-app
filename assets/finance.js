@@ -1,7 +1,6 @@
 (function () {
   'use strict';
 
-  const STORAGE_KEY = 'adm_finance_v1';
   const SUPABASE_TABLE = 'finance_entries';
   const EMPTY_DATA = { income: [], expenses: [], orders: [] };
 
@@ -12,31 +11,10 @@
     .replace(/>/g, '&gt;');
 
   let currentData = { ...EMPTY_DATA };
-  let cloudMode = 'local';
+  let cloudMode = 'error';
 
   function cloneEmptyData() {
     return { income: [], expenses: [], orders: [] };
-  }
-
-  function loadLocalData() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-      return {
-        income: Array.isArray(parsed.income) ? parsed.income : [],
-        expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
-        orders: Array.isArray(parsed.orders) ? parsed.orders : []
-      };
-    } catch {
-      return cloneEmptyData();
-    }
-  }
-
-  function saveLocalData(data) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      income: Array.isArray(data.income) ? data.income : [],
-      expenses: Array.isArray(data.expenses) ? data.expenses : [],
-      orders: Array.isArray(data.orders) ? data.orders : []
-    }));
   }
 
   function uid() {
@@ -137,12 +115,11 @@
   async function refreshData() {
     try {
       currentData = await loadCloudData();
-      saveLocalData(currentData);
       cloudMode = 'supabase';
     } catch (error) {
       console.warn('[finance] fallback local:', error?.message || error);
-      currentData = loadLocalData();
-      cloudMode = 'local';
+      currentData = cloneEmptyData();
+      cloudMode = 'error';
     }
     render();
   }
@@ -495,9 +472,6 @@
       note: note.trim()
     };
 
-    currentData[type].push(item);
-    saveLocalData(currentData);
-
     try {
       await insertCloudRow({
         id: item.id,
@@ -507,10 +481,11 @@
         amount: item.amount,
         note: item.note
       });
+      currentData[type].push(item);
       cloudMode = 'supabase';
     } catch (error) {
-      cloudMode = 'local';
-      alert(`Zapisano lokalnie. Supabase błąd: ${error?.message || error}`);
+      cloudMode = 'error';
+      alert(`Nie zapisano. Supabase błąd: ${error?.message || error}`);
     }
 
     render();
@@ -533,9 +508,6 @@
       link: link.trim()
     };
 
-    currentData.orders.push(item);
-    saveLocalData(currentData);
-
     try {
       await insertCloudRow({
         id: item.id,
@@ -544,25 +516,24 @@
         price: item.price,
         link: item.link
       });
+      currentData.orders.push(item);
       cloudMode = 'supabase';
     } catch (error) {
-      cloudMode = 'local';
-      alert(`Zapisano lokalnie. Supabase błąd: ${error?.message || error}`);
+      cloudMode = 'error';
+      alert(`Nie zapisano. Supabase błąd: ${error?.message || error}`);
     }
 
     render();
   }
 
   async function deleteEntry(type, id) {
-    currentData[type] = currentData[type].filter((item) => item.id !== id);
-    saveLocalData(currentData);
-
     try {
       await deleteCloudRow(id);
+      currentData[type] = currentData[type].filter((item) => item.id !== id);
       cloudMode = 'supabase';
     } catch (error) {
-      cloudMode = 'local';
-      alert(`Usunięto lokalnie. Supabase błąd: ${error?.message || error}`);
+      cloudMode = 'error';
+      alert(`Nie usunięto. Supabase błąd: ${error?.message || error}`);
     }
 
     render();

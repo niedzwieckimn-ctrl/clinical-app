@@ -1,5 +1,5 @@
 // assets/client-details.js
-(function () {
+(async function () {
   'use strict';
 
   // ===== UTIL =====
@@ -426,11 +426,12 @@ box.innerHTML = `
 wirePromptButton();
 
 
-  const saveBlock = (title, text) => {
+  const saveBlock = async (title, text) => {
     const list = clientsLoad(); const idx = list.findIndex(x=>x.id === id); if (idx < 0) return;
     const stamp = new Date().toLocaleDateString('pl-PL');
     list[idx].notes = (list[idx].notes || '') + `\n--- ${title} ${stamp} ---\n` + text + '\n';
-    clientsSave(list); client = list[idx]; alert('Zapisano do Notatek.');
+    const {error}=await sb.from('clients').update({notes:list[idx].notes}).eq('id',id);
+    if(error){alert(`Nie zapisano: ${error.message}`);return}clientsSave(list); client = list[idx]; alert('Zapisano do Notatek.');
   };
 document.getElementById('sg-detailed')?.addEventListener('change', async (e)=>{
   SG_DETAILED = !!e.target.checked;
@@ -453,14 +454,13 @@ document.getElementById('sg-detailed')?.addEventListener('change', async (e)=>{
   function normEmail(e){ return String(e||'').trim().toLowerCase(); }
   function normPhone(p){ return String(p||'').replace(/[^\d+]/g,''); }
 
-  // ===== LOCAL STORAGE =====
-  const CLIENTS_LS_KEY = 'adm_clients_v1';
+  // Dane klienta pozostają w Supabase; lokalnie trzymana jest tylko bieżąca kopia w pamięci.
+  let clientsMemory = [];
   function clientsLoad(){
-    try { return JSON.parse(localStorage.getItem(CLIENTS_LS_KEY)) || []; }
-    catch { return []; }
+    return clientsMemory;
   }
   function clientsSave(list){
-    localStorage.setItem(CLIENTS_LS_KEY, JSON.stringify(list || []));
+    clientsMemory = Array.isArray(list) ? list : [];
   }
 
   // ===== SECTIONS =====
@@ -487,9 +487,11 @@ document.getElementById('sg-detailed')?.addEventListener('change', async (e)=>{
 
   // ===== LOAD CLIENT =====
   const id = qs.get('id');
-  let client = clientsLoad().find(x => x.id === id);
+  const {data:clientRow,error:clientError}=await sb.from('clients').select('id,name,email,phone,address,prefs,allergies,contras,notes,treatment_notes').eq('id',id).single();
+  let client = clientRow ? {...clientRow,treatmentNotes:clientRow.treatment_notes||{}} : null;
+  clientsSave(client ? [client] : []);
   if (!client) {
-    document.body.innerHTML = '<div class="container"><p>Nie znaleziono klienta.</p><p><a href="admin.html#clients">Wróć</a></p></div>';
+    document.body.innerHTML = '<div class="container"><p>Nie znaleziono klienta.</p><p><a href="index.html#clients">Wróć</a></p></div>';
     return;
   }
 
@@ -625,7 +627,7 @@ async function refreshCounts(){
     $('#cd-contras').value    = client.contras || '';
     $('#cd-notes').value      = client.notes || '';
   }
-  function saveNotesFromForm(){
+  async function saveNotesFromForm(){
     const list = clientsLoad();
     const idx = list.findIndex(x => x.id === id);
     if (idx < 0) return;
@@ -633,6 +635,8 @@ async function refreshCounts(){
     list[idx].allergies = $('#cd-allergies')?.value || '';
     list[idx].contras   = $('#cd-contras')?.value || '';
     list[idx].notes     = $('#cd-notes')?.value || '';
+    const {error}=await sb.from('clients').update({prefs:list[idx].prefs,allergies:list[idx].allergies,contras:list[idx].contras,notes:list[idx].notes}).eq('id',id);
+    if(error){alert(`Nie zapisano: ${error.message}`);return}
     clientsSave(list);
     client = list[idx]; // odśwież referencję
     alert('Zapisano.');
@@ -653,8 +657,8 @@ refreshCounts(); // ← doda liczby do przycisków
     await renderHistory();
     showSection('cd-section-history');
   });
-// zapis uwag terapeutki w Historii (localStorage)
-document.getElementById('cd-history-rows')?.addEventListener('click', (e) => {
+// zapis uwag terapeutki w Historii do Supabase
+document.getElementById('cd-history-rows')?.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-save-hist]');
   if (!btn) return;
   const key = decodeURIComponent(btn.getAttribute('data-save-hist') || '');
@@ -666,6 +670,8 @@ document.getElementById('cd-history-rows')?.addEventListener('click', (e) => {
   if (idx < 0) return;
   list[idx].treatmentNotes = list[idx].treatmentNotes || {};
   list[idx].treatmentNotes[key] = val;
+  const {error}=await sb.from('clients').update({treatment_notes:list[idx].treatmentNotes}).eq('id',id);
+  if(error){alert(`Nie zapisano: ${error.message}`);return}
   clientsSave(list);
   client = list[idx]; // odśwież referencję
 
@@ -685,9 +691,8 @@ document.getElementById('cd-history-rows')?.addEventListener('click', (e) => {
   $('#cd-save')?.addEventListener('click', saveNotesFromForm);
 
   $('#cd-btn-back')?.addEventListener('click', () => {
-    // spróbuj zamknąć; jeśli przeglądarka blokuje, wróć do admin
-    window.close();
-    setTimeout(() => { location.href = 'admin.html#clients'; }, 200);
+    if (history.length > 1) history.back();
+    else location.replace('index.html#clients');
   });
   document.getElementById('cd-btn-suggestions')?.addEventListener('click', async () => {
   await renderSuggestions();
