@@ -248,9 +248,7 @@
     const selectedMonth = getCurrentMonthValue();
     const incomeRows = filterByMonth(currentData.income, selectedMonth).sort((a, b) => String(a.date).localeCompare(String(b.date)));
     const expenseRows = filterByMonth(currentData.expenses, selectedMonth).sort((a, b) => String(a.date).localeCompare(String(b.date)));
-    const orderRows = (currentData.orders || []).slice();
     const totals = totalsForMonth(currentData, selectedMonth);
-    const ordersSum = ordersTotal(currentData);
 
     root.innerHTML = `
       <div class="card stack" style="background:#fafafa;">
@@ -311,18 +309,6 @@
       </div>
 
       <div class="card stack">
-        <h3 style="margin:0;">Zamówienia</h3>
-        <div class="row">
-          <input id="finance-order-product" type="text" placeholder="Produkt" />
-          <input id="finance-order-price" type="number" step="0.01" min="0" placeholder="Cena" />
-          <input id="finance-order-link" type="url" placeholder="Link do sklepu" style="min-width:260px; flex:1;" />
-          <button id="finance-order-add" class="btn">Dodaj zamówienie</button>
-        </div>
-        <p style="margin:0; color:#666;">Łączna wartość zamówień: <strong>${currency(ordersSum)}</strong></p>
-        <ul id="finance-orders-list" style="margin:0; padding-left:20px;"></ul>
-      </div>
-
-      <div class="card stack">
         <h3 style="margin:0;">Przychody w miesiącu</h3>
         <table>
           <thead>
@@ -376,7 +362,6 @@
 
     renderMoneyRows('finance-income-rows', incomeRows, 'Brak przychodów w tym miesiącu.', 'income');
     renderMoneyRows('finance-expense-rows', expenseRows, 'Brak wydatków w tym miesiącu.', 'expenses');
-    renderOrdersList(orderRows);
     renderHistory(currentData, selectedMonth);
     wireActions();
   }
@@ -544,7 +529,6 @@
     $('#finance-pdf-export')?.addEventListener('click', exportMonthPdf);
     $('#finance-income-add')?.addEventListener('click', () => addMoneyEntry('income'));
     $('#finance-expense-add')?.addEventListener('click', () => addMoneyEntry('expenses'));
-    $('#finance-order-add')?.addEventListener('click', addOrder);
 
     $('#finance-root')?.addEventListener('click', (event) => {
       const button = event.target.closest('[data-finance-delete]');
