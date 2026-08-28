@@ -22,7 +22,13 @@ export const handler = async (event) => {
     });
     if (error) {
       const unavailable = /slot_unavailable|not available|duplicate/i.test(error.message || '');
-      return response(unavailable ? 409 : 400, { error: unavailable ? 'Wybrany termin nie jest już dostępny.' : 'Nie udało się utworzyć rezerwacji.' });
+      const code = clean(error.code || 'DB', 30);
+      console.error('[create-booking rpc]', { code, message: error.message, details: error.details, hint: error.hint });
+      return response(unavailable ? 409 : 400, {
+        error: unavailable
+          ? 'Wybrany termin nie jest już dostępny.'
+          : `Nie udało się utworzyć rezerwacji. Kod błędu: ${code}`
+      });
     }
     const booking = Array.isArray(data) ? data[0] : data;
     try {
@@ -35,7 +41,12 @@ export const handler = async (event) => {
     return response(201, { ok: true, booking });
   } catch (error) {
     console.error('[create-booking]', error);
-    return response(500, { error: 'Nie udało się utworzyć rezerwacji.' });
+    const missingConfig = /Brak konfiguracji Supabase/i.test(error?.message || '');
+    return response(500, {
+      error: missingConfig
+        ? 'Brak konfiguracji Supabase w Netlify Functions. Sprawdź SUPABASE_URL i SUPABASE_SERVICE_ROLE_KEY, a następnie wykonaj nowy deploy.'
+        : 'Nie udało się utworzyć rezerwacji. Kod błędu: FUNCTION'
+    });
   }
 };
 
