@@ -8,6 +8,8 @@ const CORS = {
 
 export const handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return json(204, { ok: true });
+  const cronToken = String(event.headers?.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!process.env.CRON_SECRET || cronToken !== process.env.CRON_SECRET) return json(401, { error: 'Unauthorized' });
 
   try {
     const sb = adminClient();
@@ -104,6 +106,9 @@ function addDays(date, days) {
 }
 
 function buildReminderHtml({ bookingNo, whenStr, serviceName, clientName, address }) {
+  const contactPhone = process.env.CONTACT_PHONE || '729 979 396';
+  const contactPhoneHref = contactPhone.replace(/[^+\d]/g, '');
+  const contactEmail = process.env.CONTACT_EMAIL || 'massages.n.spa@gmail.com';
   return `
     <p>Dzień dobry! ${escapeHtml(clientName || '')},</p>
     <p>to automatyczne przypomnienie o Twojej wizycie, która odbędzie się już jutro. :)</p>
@@ -115,8 +120,8 @@ function buildReminderHtml({ bookingNo, whenStr, serviceName, clientName, addres
     </p>
     <p>W razie potrzeby zmiany terminu skontaktuj się z nami jak najszybciej.</p>
     <p>
-      📞 tel. <a href="tel:797193931">797 193 931</a><br>
-      ✉️ e-mail: <a href="mailto:massages.n.spa@gmail.com">massages.n.spa@gmail.com</a>
+      📞 tel. <a href="tel:${escapeHtml(contactPhoneHref)}">${escapeHtml(contactPhone)}</a><br>
+      ✉️ e-mail: <a href="mailto:${escapeHtml(contactEmail)}">${escapeHtml(contactEmail)}</a>
     </p>
     <p>Do zobaczenia!<br>Zespół <strong>Massages &amp; SPA</strong></p>
   `;

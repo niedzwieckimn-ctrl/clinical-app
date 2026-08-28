@@ -1,5 +1,5 @@
 // netlify/functions/admin-cancel.js
-import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from './_auth.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -12,10 +12,12 @@ export const handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'Method Not Allowed' });
 
   try {
+    const auth = await requireAdmin(event);
+    if (auth.error) return auth.error;
     const { booking_no } = JSON.parse(event.body || '{}');
     if (!booking_no) return json(400, { error: 'Brak booking_no' });
 
-    const sb = adminClient();
+    const sb = auth.sb;
 
     // 1) Pobierz dane rezerwacji (z widoku z address, itp.)
     const { data: booking, error: getErr } = await sb
@@ -25,11 +27,14 @@ export const handler = async (event) => {
       .single();
     if (getErr || !booking) return json(404, { error: 'Booking not found', details: getErr });
 
+    const { data: bookingRow } = await sb.from('bookings').select('slot_id').eq('booking_no', booking_no).single();
+    booking.slot_id = bookingRow?.slot_id || null;
+
     // 2) Zmień status + znacznik czasu
     // najpierw złap dane (już masz je w 'booking'), potem usuń rekord
 const { error: delErr } = await sb
   .from('bookings')
-  .delete()
+  .update({ status: 'Anulowana', canceled_at: new Date().toISOString() })
   .eq('booking_no', booking_no);
 if (delErr) return json(500, { error: delErr.message });
 
@@ -93,12 +98,6 @@ try {
 };
 
 // --- helpers ---
-function adminClient() {
-  const url = process.env.SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE;
-  if (!url || !key) throw new Error('Brak SUPABASE_URL lub SUPABASE_SERVICE_ROLE(_KEY)');
-  return createClient(url, key, { auth: { persistSession: false } });
-}
 function json(status, body) {
   return { statusCode: status, headers: { 'Content-Type': 'application/json', ...CORS }, body: JSON.stringify(body) };
 }

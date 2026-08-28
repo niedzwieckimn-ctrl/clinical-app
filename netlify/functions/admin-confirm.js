@@ -1,5 +1,5 @@
 // netlify/functions/admin-confirm.js
-import { createClient } from '@supabase/supabase-js';
+import { requireAdmin } from './_auth.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -15,10 +15,12 @@ export const handler = async (event) => {
   }
 
   try {
+    const auth = await requireAdmin(event);
+    if (auth.error) return auth.error;
     const { booking_no } = JSON.parse(event.body || '{}');
     if (!booking_no) return json(400, { error: 'Brak booking_no w body' });
 
-    const sb = adminClient();
+    const sb = auth.sb;
 
     // Pobierz booking z widoku (ma address, client_email itd.)
     const { data: booking, error: getErr } = await sb
@@ -27,6 +29,10 @@ export const handler = async (event) => {
       .eq('booking_no', booking_no)
       .single();
     if (getErr || !booking) return json(404, { error: 'Booking not found', details: getErr });
+
+    if (!String(booking.address || '').trim()) {
+      return json(409, { error: 'Uzupełnij adres klienta przed potwierdzeniem rezerwacji.' });
+    }
 
     // Update statusu w tabeli
     const { error: updErr } = await sb
@@ -47,14 +53,17 @@ export const handler = async (event) => {
 });
 
 
+    const contactPhone = process.env.CONTACT_PHONE || '729 979 396';
+    const contactPhoneHref = contactPhone.replace(/[^+\d]/g, '');
+    const contactEmail = process.env.CONTACT_EMAIL || 'massages.n.spa@gmail.com';
     const subject = `✅ Rezerwacja potwierdzona! – ${booking.service_name || 'wizyta'}`;
     const html = `
   <p>Dziękujemy za dokonanie rezerwacji w <strong>Massages &amp; SPA</strong>.</p>
 
   <p>
-  📅 <strong>Termin:</strong> ${whenStr}<br>
-  🧘‍♀️ <strong>Usługa:</strong> ${booking.service_name}<br>
-  📍 <strong>Adres:</strong> ${booking.address}
+  📅 <strong>Termin:</strong> ${escapeHtml(whenStr)}<br>
+  🧘‍♀️ <strong>Usługa:</strong> ${escapeHtml(booking.service_name || 'wizyta')}<br>
+  📍 <strong>Adres:</strong> ${escapeHtml(booking.address)}
   </p>
 
   <p>Aby masaż przebiegł komfortowo i sprawnie, prosimy o przygotowanie się według poniższych wskazówek:</p>
@@ -71,8 +80,8 @@ export const handler = async (event) => {
 
   <p>
   📞 W razie zmian lub pytań prosimy o kontakt:<br>
-  tel. <a href="tel:797193931">797 193 931</a><br>
-  e-mail: <a href="mailto:massages.n.spa@gmail.com">massages.n.spa@gmail.com</a>
+  tel. <a href="tel:${escapeHtml(contactPhoneHref)}">${escapeHtml(contactPhone)}</a><br>
+  e-mail: <a href="mailto:${escapeHtml(contactEmail)}">${escapeHtml(contactEmail)}</a>
   </p>
 
   <p>Do zobaczenia w Twoim domu!<br>
@@ -120,8 +129,8 @@ export const handler = async (event) => {
         </p>
         <p> Jeśli musisz odwołać lub przełożyć spotkanie prosimy o kontakt.</p>
         <p>
-          📞 Kontakt: <a href="tel:797193931">797 193 931</a> /
-          <a href="mailto:massages.n.spa@gmail.com">massages.n.spa@gmail.com</a>
+          📞 Kontakt: <a href="tel:${escapeHtml(contactPhoneHref)}">${escapeHtml(contactPhone)}</a> /
+          <a href="mailto:${escapeHtml(contactEmail)}">${escapeHtml(contactEmail)}</a>
         </p>
       `;
 
@@ -149,12 +158,6 @@ export const handler = async (event) => {
 };
 
 // helpers
-function adminClient() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error('Brak SUPABASE_URL lub SUPABASE_SERVICE_ROLE_KEY');
-  return createClient(url, key, { auth: { persistSession: false } });
-}
 function json(status, body) {
   return { statusCode: status, headers: { 'Content-Type': 'application/json', ...CORS }, body: JSON.stringify(body) };
 }
