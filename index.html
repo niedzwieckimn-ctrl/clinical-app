@@ -30,14 +30,14 @@
 
   <div id="app-shell" class="app-shell hidden">
     <aside class="sidebar">
-      <div class="brand"><img src="assets/logo.svg" alt=""><div><strong>Massages &amp; Spa</strong><span>Clinical</span></div></div>
+      <div class="brand"><img src="assets/logo.svg" alt="Massages &amp; Spa Clinical"></div>
       <nav id="top-tabs" class="side-nav" aria-label="Główna nawigacja">
         <button data-tab="dashboard" class="active"><i data-icon="home"></i><span>Pulpit</span></button>
         <button data-tab="bookings"><i data-icon="calendar-check"></i><span>Rezerwacje</span></button>
         <button data-tab="slots"><i data-icon="calendar"></i><span>Dodaj termin</span></button>
         <button data-tab="clients"><i data-icon="users"></i><span>Klienci</span></button>
         <button data-tab="finance"><i data-icon="wallet"></i><span>Finanse</span></button>
-        <button data-tab="cosmetics"><i data-icon="package"></i><span>Kosmetyki</span></button>
+        <button data-tab="cosmetics"><svg class="nav-svg cosmetics-nav-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M8 2.5h4v3H8zM7 5.5h6l2 3V17H5V8.5z"></path><path d="M7.5 11c1.6-1.2 3.4-1.2 5 0"></path></svg><span>Kosmetyki</span></button>
         <button data-tab="settings"><i data-icon="settings"></i><span>Ustawienia</span></button>
       </nav>
       <div class="sidebar-user"><span class="avatar">M</span><div><strong>Marzena</strong><small>Administrator</small></div><button id="logout-btn" class="text-btn" type="button">Wyloguj</button></div>
@@ -154,7 +154,7 @@
       </section>
     </main>
 
-    <nav class="mobile-nav" aria-label="Nawigacja mobilna"><button data-tab-target="dashboard" class="active"><i data-icon="home"></i><span>Pulpit</span></button><button data-tab-target="finance"><i data-icon="wallet"></i><span>Finanse</span></button><button class="mobile-add" data-tab-target="slots" data-focus-availability="true" aria-label="Dodaj termin">＋</button><button data-tab-target="clients"><i data-icon="users"></i><span>Klienci</span></button><button data-tab-target="cosmetics"><i data-icon="package"></i><span>Kosmetyki</span></button><button data-tab-target="settings"><i data-icon="more"></i><span>Więcej</span></button></nav>
+    <nav class="mobile-nav" aria-label="Nawigacja mobilna"><button data-tab-target="dashboard" class="active"><i data-icon="home"></i><span>Pulpit</span></button><button data-tab-target="finance"><i data-icon="wallet"></i><span>Finanse</span></button><button class="mobile-add" data-tab-target="slots" data-focus-availability="true" aria-label="Dodaj termin">＋</button><button data-tab-target="clients"><i data-icon="users"></i><span>Klienci</span></button><button data-tab-target="cosmetics"><svg class="nav-svg cosmetics-nav-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M8 2.5h4v3H8zM7 5.5h6l2 3V17H5V8.5z"></path><path d="M7.5 11c1.6-1.2 3.4-1.2 5 0"></path></svg><span>Kosmetyki</span></button><button data-tab-target="settings"><i data-icon="more"></i><span>Więcej</span></button></nav>
   </div>
 
   <div id="details-modal" class="modal hidden" role="dialog" aria-modal="true"><div class="modal-content"><button id="close-details" class="modal-close" aria-label="Zamknij">×</button><p class="eyebrow">Rezerwacja</p><h2>Szczegóły wizyty</h2><div id="details-body"></div><div id="details-actions" class="modal-actions"></div></div></div>
