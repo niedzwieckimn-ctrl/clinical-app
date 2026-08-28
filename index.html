@@ -19,8 +19,10 @@
       <img src="assets/logo.svg" alt="Massages & Spa Clinical" class="login-logo">
       <p class="eyebrow">Panel administracyjny</p>
       <h1>Witaj ponownie</h1>
-      <label for="pin-input">PIN administratora</label>
-      <input id="pin-input" type="password" inputmode="numeric" maxlength="8" placeholder="••••" autocomplete="current-password">
+      <label for="admin-email">E-mail administratora</label>
+      <input id="admin-email" type="email" placeholder="admin@twojadomena.pl" autocomplete="username" required>
+      <label for="pin-input">Hasło</label>
+      <input id="pin-input" type="password" minlength="4" placeholder="Minimum 4 znaki" autocomplete="current-password" required>
       <button id="pin-btn" class="btn primary">Wejdź do terminarza</button>
       <p id="pin-err" class="form-error" aria-live="polite"></p>
     </div>
@@ -35,9 +37,10 @@
         <button data-tab="slots"><i data-icon="calendar"></i><span>Dodaj termin</span></button>
         <button data-tab="clients"><i data-icon="users"></i><span>Klienci</span></button>
         <button data-tab="finance"><i data-icon="wallet"></i><span>Finanse</span></button>
+        <button data-tab="cosmetics"><i data-icon="package"></i><span>Kosmetyki</span></button>
         <button data-tab="settings"><i data-icon="settings"></i><span>Ustawienia</span></button>
       </nav>
-      <div class="sidebar-user"><span class="avatar">M</span><div><strong>Marzena</strong><small>Administrator</small></div></div>
+      <div class="sidebar-user"><span class="avatar">M</span><div><strong>Marzena</strong><small>Administrator</small></div><button id="logout-btn" class="text-btn" type="button">Wyloguj</button></div>
     </aside>
 
     <main class="main-content">
@@ -88,6 +91,7 @@
             <label>Godzina<select id="slot-time"></select></label>
             <label>Powtarzanie<select id="slot-repeat"><option value="once">Tylko ten dzień</option><option value="weekly">Co tydzień (4 tygodnie)</option><option value="weekdays">Poniedziałek–piątek</option><option value="custom">Wybrane dni tygodnia</option></select></label>
             <div id="custom-weekdays" class="weekday-pills hidden"><label><input type="checkbox" value="1">Pn</label><label><input type="checkbox" value="2">Wt</label><label><input type="checkbox" value="3">Śr</label><label><input type="checkbox" value="4">Cz</label><label><input type="checkbox" value="5">Pt</label><label><input type="checkbox" value="6">So</label><label><input type="checkbox" value="0">Nd</label></div>
+            <label class="short-notice-toggle"><input id="slot-short-notice" type="checkbox"> Wyjątkowo pozwól klientowi zarezerwować ten termin wcześniej niż 48 godzin przed wizytą</label>
             <p class="form-note">Godziny są dostępne w wygodnych odstępach co 15 minut.</p>
             <button id="slot-add" type="submit" class="btn primary">Dodaj terminy</button>
           </form>
@@ -97,6 +101,37 @@
 
       <section id="clients-screen" class="screen hidden"><div class="paper-panel"><input id="client-search" type="search" placeholder="Szukaj: imię, e-mail, telefon"><div class="table-container"><table class="bookings-table"><thead><tr><th>Imię i nazwisko</th><th>Adres</th><th>Szczegóły</th></tr></thead><tbody id="clients-rows"></tbody></table></div></div></section>
       <section id="finance-screen" class="screen hidden"><div id="finance-root" class="stack"></div></section>
+      <section id="cosmetics-screen" class="screen hidden">
+        <div class="cosmetics-head"><div><p class="eyebrow">Magazyn i receptury</p><h2>Kosmetyki</h2></div><div class="cosmetics-tabs"><button id="cos-tab-bought" class="btn primary" type="button">Kupione</button><button id="cos-tab-own" class="btn ghost" type="button">Moje</button></div></div>
+        <section id="cos-bought-panel" class="stack">
+          <form id="cos-bought-form" class="paper-panel cosmetics-form">
+            <label>Zdjęcie<input id="cos-bought-photo" type="file" accept="image/*"></label>
+            <label>Nazwa<input id="cos-bought-name" maxlength="160" required></label>
+            <label>Link<input id="cos-bought-link" type="url" maxlength="1000" placeholder="https://..."></label>
+            <label>Masa (g)<input id="cos-bought-mass" type="number" min="0.01" step="0.01" required></label>
+            <label>Cena (zł)<input id="cos-bought-price" type="number" min="0" step="0.01" required></label>
+            <button class="btn primary" type="submit">Dodaj</button>
+          </form>
+          <div class="paper-panel cosmetics-table-wrap"><table class="bookings-table"><thead><tr><th>Kosmetyk</th><th>Link</th><th>Masa</th><th>Cena</th><th>Koszt 100 g</th><th></th></tr></thead><tbody id="cos-bought-list"></tbody></table></div>
+        </section>
+        <section id="cos-own-panel" class="stack hidden">
+          <form id="cos-own-form" class="paper-panel cosmetics-form cosmetics-own-form">
+            <label>Zdjęcie<input id="cos-own-photo" type="file" accept="image/*"></label>
+            <label>Nazwa kosmetyku<input id="cos-own-name" maxlength="160" required></label>
+            <label>Cena sprzedaży za 100 g<input id="cos-own-sale" type="number" min="0" step="0.01" required></label>
+            <button class="btn primary" type="submit">Dodaj kosmetyk</button>
+          </form>
+          <div class="paper-panel cosmetics-table-wrap"><table class="bookings-table"><thead><tr><th>Kosmetyk</th><th>Koszt 100 g</th><th>Cena 100 g</th><th>Działania</th></tr></thead><tbody id="cos-own-list"></tbody></table></div>
+          <div id="cos-composition" class="paper-panel cosmetics-composition hidden">
+            <div class="section-heading"><div><p class="eyebrow">Receptura</p><h2 id="cos-composition-title">Skład</h2></div><button id="cos-close-composition" class="btn ghost" type="button">Zwiń skład</button></div>
+            <form id="cos-ingredient-form" class="cosmetics-ingredient-form">
+              <label>Nazwa składnika<input id="cos-ing-name" maxlength="160" required></label><label>Link<input id="cos-ing-link" type="url" maxlength="1000" placeholder="https://..."></label><label>Masa opakowania (g)<input id="cos-ing-pack-mass" type="number" min="0.01" step="0.01" required></label><label>Cena opakowania (zł)<input id="cos-ing-pack-price" type="number" min="0" step="0.01" required></label><label>W recepturze (g)<input id="cos-ing-recipe-mass" type="number" min="0.01" step="0.01" required></label><button class="btn primary" type="submit">Dodaj składnik</button>
+            </form>
+            <div class="table-container"><table class="bookings-table"><thead><tr><th>Składnik</th><th>Opakowanie</th><th>W recepturze</th><th>Koszt w recepturze</th><th></th></tr></thead><tbody id="cos-ingredients-list"></tbody></table></div>
+            <div class="cosmetics-summary"><span>Masa receptury<strong id="cos-total-mass">0 g</strong></span><span>Koszt receptury<strong id="cos-total-cost">0,00 zł</strong></span><span>Koszt 100 g<strong id="cos-cost-100">0,00 zł</strong></span></div>
+          </div>
+        </section>
+      </section>
       <section id="settings-screen" class="screen hidden">
         <div class="settings-layout">
           <section class="paper-panel settings-card settings-message-card">
@@ -110,21 +145,22 @@
               <label for="set-phone">Numer telefonu<input id="set-phone" type="tel" placeholder="+48 000 000 000"></label>
             </section>
             <section class="paper-panel settings-card security-card">
-              <div class="settings-card-head"><i class="settings-icon" data-icon="settings"></i><div><p class="eyebrow">Bezpieczeństwo</p><h2>Dostęp do panelu</h2><p>PIN powinien zawierać od 4 do 8 cyfr.</p></div></div>
-              <label for="set-pin">PIN administratora<input id="set-pin" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password"></label>
+              <div class="settings-card-head"><i class="settings-icon" data-icon="settings"></i><div><p class="eyebrow">Bezpieczeństwo</p><h2>Dostęp do panelu</h2><p>Panel chroni konto Supabase Auth. Hasło ma minimum 4 znaki.</p></div></div>
+              <label for="set-pin">Hasło administratora<input id="set-pin" type="password" minlength="4" placeholder="Zmieniaj w Supabase Auth" disabled></label>
             </section>
           </div>
         </div>
-        <div class="settings-savebar"><div><strong>Gotowe do zapisania?</strong><small>Zmiany obowiązują od razu w tej przeglądarce.</small></div><button id="settings-save" class="btn primary">Zapisz ustawienia</button></div>
+        <div class="settings-savebar"><div><strong>Gotowe do zapisania?</strong><small>Ustawienia gabinetu zapisują się w tej przeglądarce; dane klientów pozostają wyłącznie w Supabase.</small></div><button id="settings-save" class="btn primary">Zapisz ustawienia</button></div>
       </section>
     </main>
 
-    <nav class="mobile-nav" aria-label="Nawigacja mobilna"><button data-tab-target="dashboard" class="active"><i data-icon="home"></i><span>Pulpit</span></button><button data-tab-target="finance"><i data-icon="wallet"></i><span>Finanse</span></button><button class="mobile-add" data-tab-target="slots" data-focus-availability="true" aria-label="Dodaj termin">＋</button><button data-tab-target="clients"><i data-icon="users"></i><span>Klienci</span></button><button data-tab-target="settings"><i data-icon="more"></i><span>Więcej</span></button></nav>
+    <nav class="mobile-nav" aria-label="Nawigacja mobilna"><button data-tab-target="dashboard" class="active"><i data-icon="home"></i><span>Pulpit</span></button><button data-tab-target="finance"><i data-icon="wallet"></i><span>Finanse</span></button><button class="mobile-add" data-tab-target="slots" data-focus-availability="true" aria-label="Dodaj termin">＋</button><button data-tab-target="clients"><i data-icon="users"></i><span>Klienci</span></button><button data-tab-target="cosmetics"><i data-icon="package"></i><span>Kosmetyki</span></button><button data-tab-target="settings"><i data-icon="more"></i><span>Więcej</span></button></nav>
   </div>
 
   <div id="details-modal" class="modal hidden" role="dialog" aria-modal="true"><div class="modal-content"><button id="close-details" class="modal-close" aria-label="Zamknij">×</button><p class="eyebrow">Rezerwacja</p><h2>Szczegóły wizyty</h2><div id="details-body"></div><div id="details-actions" class="modal-actions"></div></div></div>
   <script src="assets/admin.js"></script>
   <script src="assets/clients.js"></script>
   <script src="assets/finance.js"></script>
+  <script src="assets/cosmetics.js"></script>
 </body>
 </html>
