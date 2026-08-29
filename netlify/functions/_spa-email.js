@@ -43,7 +43,7 @@ export function spaEmail({ heading, intro, rows = [], note = '', preparation = f
           <div style="margin:22px 0 0;color:#315f39;font-family:'Trebuchet MS',Arial,sans-serif;font-size:21px;line-height:1.35;letter-spacing:.035em;font-weight:600;">${esc(heading)}</div>
         </td></tr>
         <tr><td background="${esc(BACKGROUND_URL)}" style="padding:30px 34px;background-color:#fffefa;background-image:url('${esc(BACKGROUND_URL)}');background-position:left center;background-size:cover;background-repeat:no-repeat;">
-          <p style="margin:0 0 22px;text-align:center;color:#6d625a;line-height:1.55;">${esc(intro)}</p>
+          <p style="margin:0 0 22px;text-align:center;color:#3f352f;font-weight:600;line-height:1.55;">${esc(intro)}</p>
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:rgba(252,250,246,.86);border-left:3px solid #b79555;border-collapse:collapse;">${detailRows}</table>
           ${noteHtml}${preparationHtml}
         </td></tr>
