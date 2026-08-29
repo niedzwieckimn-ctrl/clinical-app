@@ -66,6 +66,10 @@
 
     for (const c of list) {
       const tr = document.createElement('tr');
+      tr.dataset.clientId = c.id;
+      tr.setAttribute('role', 'link');
+      tr.tabIndex = 0;
+      tr.setAttribute('aria-label', `Otwórz szczegóły klienta ${c.name || ''}`.trim());
       tr.innerHTML = `
         <td>${escapeHtml(c.name || '-')}</td>
         <td>${escapeHtml(c.address || '-')}</td>
@@ -190,13 +194,26 @@
     // lista -> Szczegóły
     // było: openClientDetails(...)
 
-$('#clients-rows')?.addEventListener('click', (e) => {
-  const details = e.target.closest('[data-client-details]');
-  if (!details) return;
-  const id = details.dataset.clientDetails;
-  // ta sama karta zachowuje prawidłową historię przeglądarki/PWA
-  window.location.href = 'client.html?id=' + encodeURIComponent(id);
-});
+    const openClientPage = (id) => {
+      if (!id) return;
+      const url = new URL('./client.html', document.baseURI);
+      url.searchParams.set('id', id);
+      window.location.assign(url.href);
+    };
+
+    $('#clients-rows')?.addEventListener('click', (e) => {
+      const details = e.target.closest('[data-client-details]');
+      const row = e.target.closest('tr[data-client-id]');
+      openClientPage(details?.dataset.clientDetails || row?.dataset.clientId);
+    });
+
+    $('#clients-rows')?.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const row = e.target.closest('tr[data-client-id]');
+      if (!row) return;
+      e.preventDefault();
+      openClientPage(row.dataset.clientId);
+    });
 
 
     // panel Szczegóły – nawigacja
