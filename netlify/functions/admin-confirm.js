@@ -85,11 +85,8 @@ export const handler = async (event) => {
     ].filter(Boolean)));
 
     const whenMs = new Date(booking.when).getTime();
-    const testDelayMinutes = parsePositiveInt(process.env.REMINDER_TEST_DELAY_MINUTES);
-    const reminderAt = Number.isFinite(testDelayMinutes)
-      ? new Date(Date.now() + (testDelayMinutes * 60 * 1000))
-      : new Date(whenMs - (24 * 60 * 60 * 1000));
-    const minimumLeadMs = Number.isFinite(testDelayMinutes) ? (60 * 1000) : (5 * 60 * 1000);
+    const reminderAt = new Date(whenMs - (24 * 60 * 60 * 1000));
+    const minimumLeadMs = 5 * 60 * 1000;
     const minAllowedTime = Date.now() + minimumLeadMs;
 
     if (reminderRecipients.length === 0) {
@@ -110,20 +107,40 @@ export const handler = async (event) => {
         ]
       });
 
-      for (const to of reminderRecipients) {
-        await sendEmail({
-          to,
-          subject: reminderSubject,
-          html: reminderHtml,
-          scheduledAt: reminderAt.toISOString(),
-          idempotencyKey: `reminder:${booking.booking_no}:${to}:${reminderAt.toISOString().slice(0, 16)}`,
-        });
+      const reminderEmailIds = [];
+      try {
+        for (const to of reminderRecipients) {
+          const sent = await sendEmail({
+            to,
+            subject: reminderSubject,
+            html: reminderHtml,
+            scheduledAt: reminderAt.toISOString(),
+            idempotencyKey: `reminder:${booking.booking_no}:${to}:${reminderAt.toISOString().slice(0, 16)}`,
+          });
+          if (!sent?.id) throw new Error('Resend nie zwrócił identyfikatora przypomnienia.');
+          reminderEmailIds.push(sent.id);
+        }
+      } catch (scheduleError) {
+        await Promise.allSettled(reminderEmailIds.map(cancelScheduledEmail));
+        throw scheduleError;
+      }
+
+      const { error: reminderSaveError } = await sb
+        .from('bookings')
+        .update({
+          reminder_email_ids: reminderEmailIds,
+          reminder_scheduled_at: reminderAt.toISOString(),
+        })
+        .eq('booking_no', booking_no);
+      if (reminderSaveError) {
+        await Promise.allSettled(reminderEmailIds.map(cancelScheduledEmail));
+        throw new Error(`Nie zapisano identyfikatorów przypomnienia: ${reminderSaveError.message}`);
       }
       reminder = {
         scheduled: true,
         scheduled_at: reminderAt.toISOString(),
         recipients: reminderRecipients,
-        mode: Number.isFinite(testDelayMinutes) ? 'test_delay' : 'appointment_minus_24h',
+        mode: 'appointment_minus_24h',
       };
     }
 
@@ -139,11 +156,6 @@ function json(status, body) {
 }
 function escapeHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
-}
-function parsePositiveInt(v) {
-  const n = Number.parseInt(String(v || '').trim(), 10);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return n;
 }
 async function sendEmail({ to, subject, html, text, scheduledAt, idempotencyKey }) {
   const apiKey = process.env.RESEND_API_KEY;
@@ -168,5 +180,17 @@ async function sendEmail({ to, subject, html, text, scheduledAt, idempotencyKey 
     const out = await res.text();
     throw new Error(`Resend error: ${out}`);
   }
+  return res.json();
+}
+
+async function cancelScheduledEmail(emailId) {
+  const res = await fetch(`https://api.resend.com/emails/${encodeURIComponent(emailId)}/cancel`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) throw new Error(`Nie udało się wycofać przypomnienia ${emailId}`);
 }
 

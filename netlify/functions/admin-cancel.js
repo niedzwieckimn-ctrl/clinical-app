@@ -28,14 +28,32 @@ export const handler = async (event) => {
       .single();
     if (getErr || !booking) return json(404, { error: 'Booking not found', details: getErr });
 
-    const { data: bookingRow } = await sb.from('bookings').select('slot_id').eq('booking_no', booking_no).single();
+    const { data: bookingRow, error: bookingRowError } = await sb
+      .from('bookings')
+      .select('slot_id, reminder_email_ids, reminder_scheduled_at')
+      .eq('booking_no', booking_no)
+      .single();
+    if (bookingRowError) return json(500, { error: bookingRowError.message });
     booking.slot_id = bookingRow?.slot_id || null;
+
+    const reminderIds = Array.isArray(bookingRow?.reminder_email_ids)
+      ? bookingRow.reminder_email_ids.filter(Boolean)
+      : [];
+    const reminderCancellation = await cancelScheduledEmails(reminderIds);
+    const uncanceledReminderIds = reminderCancellation.failures
+      .map((failure) => failure.id)
+      .filter(Boolean);
 
     // 2) Zmień status + znacznik czasu
     // najpierw złap dane (już masz je w 'booking'), potem usuń rekord
 const { error: delErr } = await sb
   .from('bookings')
-  .update({ status: 'Anulowana', canceled_at: new Date().toISOString() })
+  .update({
+    status: 'Anulowana',
+    canceled_at: new Date().toISOString(),
+    reminder_email_ids: uncanceledReminderIds,
+    reminder_scheduled_at: uncanceledReminderIds.length ? bookingRow.reminder_scheduled_at : null,
+  })
   .eq('booking_no', booking_no);
 if (delErr) return json(500, { error: delErr.message });
 
@@ -94,7 +112,7 @@ try {
       await sendEmail({ to, subject, html });
     }
 
-    return json(200, { ok: true });
+    return json(200, { ok: true, reminder_cancellation: reminderCancellation });
   } catch (e) {
     return json(500, { error: String(e?.message || e) });
   }
@@ -122,4 +140,20 @@ async function sendEmail({ to, subject, html, text }) {
     const out = await res.text();
     throw new Error(`Resend error: ${out}`);
   }
+}
+
+async function cancelScheduledEmails(ids) {
+  if (!ids.length) return { requested: 0, canceled: 0, failures: [] };
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return { requested: ids.length, canceled: 0, failures: ['Brak RESEND_API_KEY'] };
+  const results = await Promise.all(ids.map(async (id) => {
+    const res = await fetch(`https://api.resend.com/emails/${encodeURIComponent(id)}/cancel`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) return { id, error: await res.text() };
+    return { id };
+  }));
+  const failures = results.filter((result) => result.error);
+  return { requested: ids.length, canceled: results.length - failures.length, failures };
 }
