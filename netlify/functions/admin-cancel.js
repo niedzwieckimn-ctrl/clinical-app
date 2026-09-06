@@ -82,7 +82,11 @@ try {
 
 
     // 3) E-mail — ta sama treść do klienta i masażystki
-    const whenStr = new Date(booking.when).toLocaleString('pl-PL', { dateStyle: 'full', timeStyle: 'short' });
+    const whenStr = new Date(booking.when).toLocaleString('pl-PL', {
+      timeZone: 'Europe/Warsaw',
+      dateStyle: 'full',
+      timeStyle: 'short',
+    });
     const subject = `❌ Rezerwacja anulowana – ${booking.service_name || 'wizyta'}`;
     const html = spaEmail({
       heading: 'Rezerwacja anulowana',
