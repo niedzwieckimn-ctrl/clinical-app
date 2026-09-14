@@ -1,3 +1,4 @@
+import { formatBookingRange } from './_booking-range.js';
 // netlify/functions/admin-confirm.js
 import { requireAdmin } from './_auth.js';
 import { spaEmail } from './_spa-email.js';
@@ -26,7 +27,7 @@ export const handler = async (event) => {
     // Pobierz booking z widoku (ma address, client_email itd.)
     const { data: booking, error: getErr } = await sb
       .from('bookings_view')
-      .select('booking_no, when, service_name, client_name, client_email, phone, address')
+      .select('booking_no, when, ends_at, service_name, client_name, client_email, phone, address')
       .eq('booking_no', booking_no)
       .single();
     if (getErr || !booking) return json(404, { error: 'Booking not found', details: getErr });
@@ -43,15 +44,7 @@ export const handler = async (event) => {
     if (updErr) return json(500, { error: updErr.message });
 
     // Email – ta sama treść do klienta i masażystki
-   const whenStr = new Date(booking.when).toLocaleString('pl-PL', {
-  timeZone: 'Europe/Warsaw',
-  weekday: 'long',
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit'
-});
+   const whenStr = formatBookingRange(booking);
 
 
     const subject = `✅ Rezerwacja potwierdzona! – ${booking.service_name || 'wizyta'}`;

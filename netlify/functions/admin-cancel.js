@@ -1,3 +1,4 @@
+import { formatBookingRange } from './_booking-range.js';
 // netlify/functions/admin-cancel.js
 import { requireAdmin } from './_auth.js';
 import { spaEmail } from './_spa-email.js';
@@ -23,7 +24,7 @@ export const handler = async (event) => {
     // 1) Pobierz dane rezerwacji (z widoku z address, itp.)
     const { data: booking, error: getErr } = await sb
       .from('bookings_view')
-      .select('booking_no, when, service_name, client_name, client_email, phone, address')
+      .select('booking_no, when, ends_at, service_name, client_name, client_email, phone, address')
       .eq('booking_no', booking_no)
       .single();
     if (getErr || !booking) return json(404, { error: 'Booking not found', details: getErr });
@@ -82,11 +83,7 @@ try {
 
 
     // 3) E-mail — ta sama treść do klienta i masażystki
-    const whenStr = new Date(booking.when).toLocaleString('pl-PL', {
-      timeZone: 'Europe/Warsaw',
-      dateStyle: 'full',
-      timeStyle: 'short',
-    });
+    const whenStr = formatBookingRange(booking);
     const subject = `❌ Rezerwacja anulowana – ${booking.service_name || 'wizyta'}`;
     const html = spaEmail({
       heading: 'Rezerwacja anulowana',

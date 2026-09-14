@@ -1,3 +1,4 @@
+import { formatBookingRange } from './_booking-range.js';
 import { createClient } from '@supabase/supabase-js';
 import { spaEmail } from './_spa-email.js';
 
@@ -22,7 +23,7 @@ export const handler = async (event) => {
 
     const { data: bookings, error } = await sb
       .from('bookings_view')
-      .select('booking_no, when, service_name, client_name, client_email, address, status')
+      .select('booking_no, when, ends_at, service_name, client_name, client_email, address, status')
       .gte('when', fetchRange.startIso)
       .lt('when', fetchRange.endIso)
       .in('status', ['Potwierdzona', 'confirmed'])
@@ -38,15 +39,7 @@ export const handler = async (event) => {
       const to = String(booking.client_email || '').trim().toLowerCase();
       if (!to) continue;
 
-      const whenStr = new Date(booking.when).toLocaleString('pl-PL', {
-        timeZone: tz,
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+      const whenStr = formatBookingRange(booking);
 
       const subject = `⏰ Przypomnienie o wizycie jutro – ${booking.service_name || 'wizyta'}`;
       const html = buildReminderHtml({
