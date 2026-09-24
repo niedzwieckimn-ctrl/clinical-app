@@ -23,7 +23,7 @@
 
     <nav class="client-tabs" aria-label="Sekcje klienta">
       <button id="cd-btn-upcoming" class="active"><span>Nadchodzące</span></button>
-      <button id="cd-btn-suggestions"><span>Sugestie</span></button>
+      <button id="cd-btn-suggestions"><span>Doradca AI</span></button>
       <button id="cd-btn-history"><span>Historia zabiegów</span></button>
       <button id="cd-btn-contact"><span>Dane kontaktowe</span></button>
       <button id="cd-btn-notes"><span>Notatki</span></button>
@@ -49,7 +49,18 @@
 
       <div id="cd-section-notes" class="cd-section hidden">
         <div class="client-section-heading"><div><p class="eyebrow">Indywidualna opieka</p><h2>Notatki o kliencie</h2></div></div>
-        <div class="client-notes-grid"><label>Preferencje<textarea id="cd-prefs" rows="3"></textarea></label><label>Alergie<textarea id="cd-allergies" rows="3"></textarea></label><label>Przeciwwskazania<textarea id="cd-contras" rows="3"></textarea></label><label>Notatki<textarea id="cd-notes" rows="4"></textarea></label></div>
+        <div class="client-notes-grid">
+          <label>Preferencje zabiegowe<textarea id="cd-prefs" rows="3" placeholder="Np. delikatniejszy nacisk, cisza, cieplejszy olejek"></textarea></label>
+          <label>Alergie<textarea id="cd-allergies" rows="3"></textarea></label>
+          <label>Przeciwwskazania i ostrożność<textarea id="cd-contras" rows="3"></textarea></label>
+          <label>Aktualne dolegliwości i zmiany<textarea id="cd-complaints" rows="4" placeholder="Np. od tygodnia większe napięcie karku; bez diagnozowania"></textarea></label>
+          <label>Praca i obciążenia<textarea id="cd-work-context" rows="4" placeholder="Np. praca siedząca, częsta jazda autem, powtarzalna praca rękami"></textarea></label>
+          <label>Sen, stres i samopoczucie<textarea id="cd-wellbeing" rows="4" placeholder="Wyłącznie informacje opisane przez klienta, bez rozpoznań"></textarea></label>
+          <label>Notatki ogólne<textarea id="cd-notes" rows="5" placeholder="Pozostałe ważne informacje o kliencie"></textarea></label>
+          <label>Kontekst relacyjny<textarea id="cd-relationship" rows="4" placeholder="Praca, hobby, ważne osoby i wydarzenia — tylko informacje przekazane dobrowolnie"></textarea></label>
+          <label>Tematy, do których warto wrócić<textarea id="cd-followups" rows="4" placeholder="Np. zapytać, jak udał się wyjazd lub remont"></textarea></label>
+          <label>Tematy, których nie poruszać<textarea id="cd-avoid-topics" rows="3" placeholder="Tematy wrażliwe lub takie, do których klient powinien wrócić sam"></textarea></label>
+        </div>
         <button id="cd-save" class="btn primary">Zapisz notatki</button>
       </div>
     </div>
