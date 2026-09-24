@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 const MAX_TEXT = 5000;
-const MAX_CHAT_TURNS = 8;
+const MAX_CHAT_TURNS = 12;
 
 export const redactContact = (value) => String(value ?? '')
   .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[e-mail usunięty]')
@@ -235,13 +235,16 @@ export const advisorInstructions = [
 ].join(' ');
 
 export const generalIdeaInstructions = [
-  'Jesteś pisemnym asystentem inspiracji dla profesjonalnego gabinetu masażu i SPA.',
-  'Odpowiadaj na pytania o kosmetyki, proste receptury, pielęgnację, atmosferę SPA, organizację gabinetu i pomysły dla klientów.',
+  'Jesteś pisemnym partnerem do rozmowy i rozwijania pomysłów dla profesjonalnego gabinetu masażu i SPA.',
+  'Prowadź naturalną rozmowę: analizuj koncepcje, proponuj warianty, porównuj zalety i ograniczenia, odpowiadaj na uwagi oraz poprawiaj wcześniejszą wersję zamiast rozpoczynać temat od początku.',
+  'Korzystaj z recent_conversation, aby pamiętać aktualnie omawiany pomysł. Gdy doprecyzowanie istotnie poprawi odpowiedź, możesz zadać jedno konkretne pytanie.',
+  'Rozmawiaj o kosmetykach, prostych recepturach, pielęgnacji, masażu, rytuałach i zabiegach SPA, atmosferze, ofercie, komunikacji, organizacji gabinetu oraz pomysłach dla klientów.',
   'Nie korzystasz z danych klienta. Nie proś o dane osobowe i nie powtarzaj żadnych imion ani nazwisk wpisanych w pytaniu.',
   'Nie stawiaj diagnoz i nie proponuj leczenia. Dla receptur podawaj praktyczne kroki, higienę wykonania, przechowywanie, ryzyko uczulenia i próbę płatkową, gdy jest adekwatna.',
   'Nie wymyślaj trwałości produktu ani skuteczności konserwacji. Gdy receptura wodna może się psuć mikrobiologicznie, wyraźnie to zaznacz.',
   'Odpowiadaj po polsku. Jeśli pytanie jest całkiem poza tematyką SPA, kosmetyków, masażu lub prowadzenia gabinetu, krótko odmów i poproś o pytanie branżowe.',
-  'Przygotuj także zwięzłą, samodzielną treść do zapisania w zakładce Pomysły. Nie zapisujesz jej samodzielnie; zapis nastąpi dopiero po kliknięciu użytkownika.',
+  'Pola idea_title, idea_category i idea_content mają przedstawiać aktualną, najlepiej dopracowaną wersję omawianego materiału. Jeśli rozmowa jest jeszcze rozpoznawcza i nie ma konkretnej treści wartej zapisania, ustaw idea_content na pusty tekst.',
+  'Nie twierdź, że nie możesz zapisywać, i nie odsyłaj do nieistniejącego przycisku. Interfejs aplikacji osobno obsługuje świadome polecenie zapisu użytkownika.',
 ].join(' ');
 
 export function buildOpenAIRequest({ mode, source, question, conversation, model, safetyIdentifier }) {
@@ -255,7 +258,7 @@ export function buildOpenAIRequest({ mode, source, question, conversation, model
     max_output_tokens: isGeneral ? 2200 : (isChat ? 1800 : 2800),
     instructions: isGeneral ? generalIdeaInstructions : advisorInstructions,
     input: JSON.stringify(isGeneral ? {
-      task: 'Odpowiedz na branżowe pytanie i przygotuj treść możliwą do świadomego zapisania jako pomysł.',
+      task: 'Kontynuuj naturalną rozmowę o pomyśle. Rozwijaj, oceniaj lub poprawiaj omawianą koncepcję zgodnie z pytaniem. Utrzymuj aktualną wersję materiału w polach idea_* tylko wtedy, gdy istnieje coś konkretnego do zapisania.',
       recent_conversation: normalizeConversation(conversation),
       question: clipText(question, 2000),
     } : {
