@@ -15,7 +15,12 @@
   let messages = [];
 
   function normalized(value) {
-    return String(value || '').normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase();
+    return String(value || '').normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase().replace(/ł/g, 'l');
+  }
+
+  function isSaveRecipeCommand(value) {
+    const command = normalized(value).replace(/[.!?]+$/g, '').replace(/\s+/g, ' ');
+    return /^(?:zapisz(?:\s+(?:go|to|ten przepis|ten pomysl|przepis|pomysl|recepture))?(?:\s+(?:w|do)\s+(?:(?:zakladce|zakladki)\s+)?pomysl(?:ach|ow|y))?|dodaj(?:\s+(?:go|to|ten przepis|ten pomysl|przepis|pomysl|recepture))?\s+do\s+(?:zakladki\s+)?pomysl(?:ow|y))$/.test(command);
   }
 
   function renderAnswer(answer) {
@@ -103,7 +108,7 @@
     input.value = '';
     renderMessages();
 
-    if (scope === 'general' && /^(zapisz|zapisz przepis)$/.test(normalizedQuestion)) {
+    if (scope === 'general' && isSaveRecipeCommand(normalizedQuestion)) {
       try {
         await saveLastRecipe();
         messages.push({ role: 'assistant', answer: { answer: 'Zapisałam ostatni przepis w zakładce Pomysły.', suggested_actions: [], safety_notes: [], sources: [], uncertainty: '' } });
@@ -202,6 +207,7 @@
   }
 
   window.GlobalAdvisor = {
+    isSaveRecipeCommand,
     init() {
       wire();
       loadClients();
