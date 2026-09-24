@@ -18,9 +18,12 @@
     return String(value || '').normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase().replace(/ł/g, 'l');
   }
 
-  function isSaveRecipeCommand(value) {
+  function isSaveIdeaCommand(value) {
     const command = normalized(value).replace(/[.!?]+$/g, '').replace(/\s+/g, ' ');
-    return /^(?:zapisz(?:\s+(?:go|to|ten przepis|ten pomysl|przepis|pomysl|recepture))?(?:\s+(?:w|do)\s+(?:(?:zakladce|zakladki)\s+)?pomysl(?:ach|ow|y))?|dodaj(?:\s+(?:go|to|ten przepis|ten pomysl|przepis|pomysl|recepture))?\s+do\s+(?:zakladki\s+)?pomysl(?:ow|y))$/.test(command);
+    if (command === 'zapisz') return true;
+    if (!/^(?:zapisz|dodaj)\b/.test(command)) return false;
+    if (/\b(?:dane|klient\w*|kart\w* klient\w*|notatk\w* klient\w*|rezerwacj\w*)\b/.test(command)) return false;
+    return /\b(?:pomysl\w*|przepis\w*|receptur\w*|material\w*|rytual\w*|koncepcj\w*|wersj\w*)\b/.test(command);
   }
 
   function isSavableIdeaAnswer(currentScope, answer) {
@@ -115,7 +118,7 @@
     input.value = '';
     renderMessages();
 
-    if (scope === 'general' && isSaveRecipeCommand(normalizedQuestion)) {
+    if (scope === 'general' && isSaveIdeaCommand(normalizedQuestion)) {
       try {
         await saveLastIdea();
         messages.push({ role: 'assistant', answer: { answer: 'Zapisałam ostatni przygotowany materiał w zakładce Pomysły.', suggested_actions: [], safety_notes: [], sources: [], uncertainty: '' } });
@@ -214,7 +217,7 @@
   }
 
   window.GlobalAdvisor = {
-    isSaveRecipeCommand,
+    isSaveIdeaCommand,
     isSavableIdeaAnswer,
     init() {
       wire();
