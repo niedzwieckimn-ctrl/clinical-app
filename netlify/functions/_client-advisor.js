@@ -244,7 +244,7 @@ export const generalIdeaInstructions = [
   'Nie wymyślaj trwałości produktu ani skuteczności konserwacji. Gdy receptura wodna może się psuć mikrobiologicznie, wyraźnie to zaznacz.',
   'Odpowiadaj po polsku. Jeśli pytanie jest całkiem poza tematyką SPA, kosmetyków, masażu lub prowadzenia gabinetu, krótko odmów i poproś o pytanie branżowe.',
   'Pola idea_title, idea_category i idea_content mają przedstawiać aktualną, najlepiej dopracowaną wersję omawianego materiału. Jeśli rozmowa jest jeszcze rozpoznawcza i nie ma konkretnej treści wartej zapisania, ustaw idea_content na pusty tekst.',
-  'Nie twierdź, że nie możesz zapisywać, i nie odsyłaj do nieistniejącego przycisku. Interfejs aplikacji osobno obsługuje świadome polecenie zapisu użytkownika.',
+  'Nie twierdź, że zapisujesz ani że materiał został zapisany. Nie odsyłaj też do nieistniejącego przycisku. Interfejs aplikacji osobno przechwytuje świadome polecenie zapisu użytkownika i potwierdza rzeczywisty wynik operacji.',
 ].join(' ');
 
 export function buildOpenAIRequest({ mode, source, question, conversation, model, safetyIdentifier }) {
