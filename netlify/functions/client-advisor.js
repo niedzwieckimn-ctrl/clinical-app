@@ -66,17 +66,21 @@ export const handler = async (event) => {
     const body = JSON.parse(event.body || '{}');
     const clientId = String(body.client_id || '').trim();
     const mode = body.mode === 'general' ? 'general' : (body.mode === 'chat' ? 'chat' : 'briefing');
-    if (!isUuid(clientId)) return withCors(response(400, { error: 'Nieprawidłowy client_id.' }));
+    if (mode !== 'general' && !isUuid(clientId)) return withCors(response(400, { error: 'Nieprawidłowy client_id.' }));
     if ((mode === 'chat' || mode === 'general') && !clipText(body.question, 2000)) {
       return withCors(response(400, { error: 'Wpisz pytanie do doradcy.' }));
     }
 
-    const { data: client, error: clientError } = await auth.sb
-      .from('clients')
-      .select(mode === 'general' ? 'id,name' : CLIENT_FIELDS)
-      .eq('id', clientId)
-      .single();
-    if (clientError || !client) return withCors(response(404, { error: 'Nie znaleziono klienta lub nie wykonano migracji odprawy.' }));
+    let client = { id: null, name: '' };
+    if (mode !== 'general') {
+      const result = await auth.sb
+        .from('clients')
+        .select(CLIENT_FIELDS)
+        .eq('id', clientId)
+        .single();
+      if (result.error || !result.data) return withCors(response(404, { error: 'Nie znaleziono klienta lub nie wykonano migracji odprawy.' }));
+      client = result.data;
+    }
 
     let source = {};
     if (mode !== 'general') {
