@@ -23,6 +23,10 @@
     return /^(?:zapisz(?:\s+(?:go|to|ten przepis|ten pomysl|przepis|pomysl|recepture))?(?:\s+(?:w|do)\s+(?:(?:zakladce|zakladki)\s+)?pomysl(?:ach|ow|y))?|dodaj(?:\s+(?:go|to|ten przepis|ten pomysl|przepis|pomysl|recepture))?\s+do\s+(?:zakladki\s+)?pomysl(?:ow|y))$/.test(command);
   }
 
+  function isSavableIdeaAnswer(currentScope, answer) {
+    return currentScope === 'general' && typeof answer?.idea_content === 'string' && answer.idea_content.trim().length > 0;
+  }
+
   function renderAnswer(answer) {
     const list = (title, items) => {
       const rows = Array.isArray(items) ? items : [];
@@ -59,7 +63,10 @@
 
   function conversationText(answer) {
     const actions = Array.isArray(answer?.suggested_actions) ? answer.suggested_actions.join('; ') : '';
-    return [answer?.answer || '', actions ? `Kroki: ${actions}` : '', answer?.uncertainty ? `Niepewność: ${answer.uncertainty}` : ''].filter(Boolean).join('\n');
+    const idea = answer?.idea_content
+      ? `Aktualna wersja pomysłu (${answer.idea_title || 'bez tytułu'}, ${answer.idea_category || 'bez kategorii'}): ${answer.idea_content}`
+      : '';
+    return [answer?.answer || '', actions ? `Kroki: ${actions}` : '', idea, answer?.uncertainty ? `Niepewność: ${answer.uncertainty}` : ''].filter(Boolean).join('\n');
   }
 
   async function callAdvisor(question) {
@@ -83,15 +90,15 @@
     return body.answer || {};
   }
 
-  async function saveLastRecipe() {
-    const lastRecipe = [...messages].reverse().find((message) => message.role === 'assistant' && message.recipe_save_allowed === true && message.answer?.idea_content);
-    if (!lastRecipe) throw new Error('Najpierw napisz: „napisz przepis na…”.');
+  async function saveLastIdea() {
+    const lastIdea = [...messages].reverse().find((message) => message.role === 'assistant' && message.idea_save_allowed === true && message.answer?.idea_content);
+    if (!lastIdea) throw new Error('Najpierw poproś doradcę o przygotowanie pomysłu, rytuału, opisu albo przepisu.');
     const { data: { session } } = await window.sb.auth.getSession();
     if (!session) throw new Error('Sesja administratora wygasła.');
-    const answer = lastRecipe.answer;
+    const answer = lastIdea.answer;
     const { error } = await window.sb.from('ideas').insert({
-      title: String(answer.idea_title || 'Przepis SPA').slice(0, 180),
-      category: String(answer.idea_category || 'Receptura').slice(0, 80),
+      title: String(answer.idea_title || 'Pomysł SPA').slice(0, 180),
+      category: String(answer.idea_category || 'Pomysł').slice(0, 80),
       content: String(answer.idea_content).slice(0, 12000),
       created_by: session.user.id,
     });
@@ -110,9 +117,9 @@
 
     if (scope === 'general' && isSaveRecipeCommand(normalizedQuestion)) {
       try {
-        await saveLastRecipe();
-        messages.push({ role: 'assistant', answer: { answer: 'Zapisałam ostatni przepis w zakładce Pomysły.', suggested_actions: [], safety_notes: [], sources: [], uncertainty: '' } });
-        setStatus('Przepis został zapisany.');
+        await saveLastIdea();
+        messages.push({ role: 'assistant', answer: { answer: 'Zapisałam ostatni przygotowany materiał w zakładce Pomysły.', suggested_actions: [], safety_notes: [], sources: [], uncertainty: '' } });
+        setStatus('Pomysł został zapisany.');
       } catch (error) {
         messages.push({ role: 'assistant', answer: { answer: error.message, suggested_actions: [], safety_notes: [], sources: [], uncertainty: '' } });
         setStatus(error.message, true);
@@ -126,12 +133,12 @@
     setStatus(scope === 'client' ? 'Analizuję kartę i historię wybranego klienta…' : 'Przygotowuję odpowiedź bez danych klienta…');
     try {
       const answer = await callAdvisor(question);
-      const recipeSaveAllowed = scope === 'general' && /\b(przepis|receptur)/.test(normalizedQuestion);
-      messages.push({ role: 'assistant', answer, recipe_save_allowed: recipeSaveAllowed });
+      const ideaSaveAllowed = isSavableIdeaAnswer(scope, answer);
+      messages.push({ role: 'assistant', answer, idea_save_allowed: ideaSaveAllowed });
       conversation.push({ role: 'user', content: question }, { role: 'assistant', content: conversationText(answer) });
-      conversation = conversation.slice(-8);
+      conversation = conversation.slice(-12);
       setStatus(scope === 'general'
-        ? (recipeSaveAllowed ? 'Przepis nie został zapisany. Aby go zachować, napisz: „zapisz”.' : 'Odpowiedź nie została zapisana.')
+        ? (ideaSaveAllowed ? 'Materiał nie został zapisany. Aby go zachować w Pomysłach, napisz: „zapisz”.' : 'Odpowiedź nie została zapisana.')
         : 'Odpowiedź jest sugestią do oceny przez terapeutkę i nie została zapisana.');
     } catch (error) {
       messages.push({ role: 'assistant', answer: { answer: error.message || 'Nie udało się uzyskać odpowiedzi.', suggested_actions: [], safety_notes: [], sources: [], uncertainty: '' } });
@@ -208,6 +215,7 @@
 
   window.GlobalAdvisor = {
     isSaveRecipeCommand,
+    isSavableIdeaAnswer,
     init() {
       wire();
       loadClients();
