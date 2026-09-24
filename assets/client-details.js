@@ -2,792 +2,509 @@
 (async function () {
   'use strict';
 
-  // ===== UTIL =====
-  const $ = (s, r=document) => r.querySelector(s);
-  const escapeHtml = (s) => String(s||'')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const fmtDatePL = (iso) => {
-    try { return new Date(iso).toLocaleDateString('pl-PL', { dateStyle:'medium' }); }
-    catch { return iso || ''; }
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const escapeHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+  const fmtDateTimePL = (iso) => {
+    try {
+      return new Date(iso).toLocaleString('pl-PL', { dateStyle: 'medium', timeStyle: 'short' });
+    } catch {
+      return iso || '';
+    }
   };
-  const qs = new URLSearchParams(location.search);
-  // === SUGESTIE: TRYB SZCZEGÓŁOWY ===
-let SG_DETAILED = false;
+  const normEmail = (value) => String(value || '').trim().toLowerCase();
+  const normPhone = (value) => String(value || '').replace(/[^\d+]/g, '');
+  const id = new URLSearchParams(location.search).get('id');
 
-const MAX_PLAN_ITEMS_SHORT = 6;   // plan w trybie krótkim
-const MAX_PLAN_ITEMS_DETAILED = 12; // plan w trybie szczegółowym
-const MAX_PREFS = 3;
-const MAX_ALLERGIES = 3;
-const MAX_CONTRAS = 3;
-const MAX_AREAS = 2;
-const HISTORY_WINDOW_DAYS = 365;
-const CLIP_LEN = 120;
-
-const planLimit = () => (SG_DETAILED ? MAX_PLAN_ITEMS_DETAILED : MAX_PLAN_ITEMS_SHORT);
-
-const clip = (s, n=CLIP_LEN) => { const t=String(s||'').trim(); return t.length<=n? t : t.slice(0,n-1)+'…'; };
-const csvList = (s, max=3) => String(s||'').split(/[;,/|]/).map(x=>x.trim()).filter(Boolean)
-  .filter((v,i,a)=>a.findIndex(z=>z.toLowerCase()===v.toLowerCase())===i).slice(0,max);
-const uniqCap = (arr,max) => { const out=[]; for(const it of arr) if(!out.includes(it)) out.push(it); return out.slice(0,max); };
-const has = (txt,...terms)=>{ const s=String(txt||'').toLowerCase(); return terms.some(t=>s.includes(String(t).toLowerCase())); };
-const daysBetween = (a,b)=>Math.round((+b-+a)/86400000);
-const recencyWeight = (whenIso)=>{ const d=Math.abs((new Date()-new Date(whenIso))/86400000);
-  if(d>HISTORY_WINDOW_DAYS) return 0; if(d>180) return .25; if(d>90) return .5; return 1; };
-
-
-// --- reguły technik i „sznyt” usług ---
-// — TECHNIKI wg słów-kluczy (rozszerzone)
-const TECH_RULES = [
-  { match:['bark','barki','obręcz','łopatk','dźwigacz','czworoboczny'],
-    recs:[
-      'Obręcz barkowa: punkty spustowe UT/LS (30–60 s/punkt, 2–3 powt.).',
-      'Mobilizacje łopatki: ślizgi scapulothoracic, depresja/rotacja w odciążeniu.',
-      'Forearm sweeping przykręgosłupowo Th; tempo wolne–umiarkowane.',
-      ...(SG_DETAILED ? [
-        'Segment: barki 8–10 min (progresja nacisku 2→4/5).',
-        'Łącz technikę striping na pasmach z rozciąganiem biernym w oddechu.'
-      ] : [])
-    ]},
-  { match:['szyj','kark','migren','bóle głowy'],
-    recs:[
-      'Wydłużenia podpotylicznych + delikatne trakcje szyjne.',
-      'MOS i pochyłe: uciski statyczne 20–30 s z oddechem.',
-      ...(SG_DETAILED ? ['Praca przy wydechu; bez sprężynowania; segment szyja 6–8 min.'] : [])
-    ]},
-  { match:['lędźw','lędz','dyskop','rwa kulsz','lumbal','ból plec'],
-    cautions:['Odc. L: bez długich ucisków izometrycznych; nie pracować na wyrostkach kolczystych.'],
-    recs:[
-      'Rozluźnienie prostowników grzbietu (forearm glides, 2–3 przejścia).',
-      'QL: uciski statyczne + wydłużenia w oddechu.',
-      ...(SG_DETAILED ? ['Rocking miednicy; segment lędźwie 6–8 min, nacisk ≤3/5.'] : [])
-    ]},
-  { match:['stolarn','praca fizyczna','łokieć','przedrami','nadgarst'],
-    recs:[
-      'Striping i poprzeczne frikcje zginaczy nadgarstka 30–45 s.',
-      'Trakcja/ślizgi promieniowo-łokciowe niskiej amplitudy.',
-      ...(SG_DETAILED ? ['Po: rozciąganie zginaczy nadgarstka 2×30 s + edukacja ergonomii chwytu.'] : [])
-    ]},
-  { match:['stres','bezsen','przemęcz','napięcie ogólne'],
-    recs:[
-      'Effleurage globalny, rytm kojący; akcent na wydech.',
-      ...(SG_DETAILED ? ['Sekwencja na przeponę 4–6 cykli; zamknięcie głaskaniami czoła/karku.'] : [])
-    ]},
-];
-
-const SERVICE_RULES = {
-  'Masaż królewski Lomi Lomi': [
-    'Płynne sekwencje przedramieniem (Lomi), łączenie segmentów ciała.',
-    ...(SG_DETAILED ? ['Kołyszący rytm, minimalne przestawienia; segmenty łączone.'] : [])
-  ],
-  'Masaż relaksacyjny ciała': [
-    'Effleurage całego ciała; progresja nacisku 1→3/5.',
-    ...(SG_DETAILED ? ['Mniej pracy punktowej, więcej globalnej; pauzy oddechowe.'] : [])
-  ],
-  'Masaż ciepłą czekoladą': [
-    'Medium podgrzane; praca raczej powierzchowna.',
-    ...(SG_DETAILED ? ['Aromat łagodny; unikać szybkiego tarcia. Segment rozgrzewka 5–7 min.'] : [])
-  ],
-  '_default': ['Rozgrzewka → akcent na obszary problemowe → wyciszenie.']
-};
-
-function deriveTechniques(corpus, serviceName){
-  const items=[], cauts=[];
-  for (const r of TECH_RULES){
-    if (!(r.match||[]).some(k=>corpus.includes(k))) continue;
-    if (r.cautions) cauts.push(...r.cautions);
-    if (r.recs)     items.push(...r.recs);
-  }
-  const svc = SERVICE_RULES[serviceName||''] || SERVICE_RULES._default;
-  const all = [...cauts, ...svc, ...items];
-  // mały bufor, przytniemy później wg planLimit()
-  return uniqCap(all, planLimit()+6);
-}
-
-
-// --- statystyki z historii (past/upcoming, naj, odstępy) ---
-function analyzeHistory(rows){
-  const now = new Date();
-  const past = rows.filter(r => new Date(r.when) < now && r.status !== 'Anulowana');
-  const upcoming = rows.filter(r => new Date(r.when) >= now && r.status !== 'Anulowana')
-                       .sort((a,b)=> new Date(a.when)-new Date(b.when));
-
-  let lastVisit=null, avgInterval=null, topService=null;
-  if (past.length){
-    lastVisit = past.reduce((a,b)=> new Date(a.when)>new Date(b.when)?a:b);
-    const sorted=[...past].sort((a,b)=> new Date(a.when)-new Date(b.when));
-    const diffs=[]; for (let i=1;i<sorted.length;i++) diffs.push(daysBetween(new Date(sorted[i-1].when), new Date(sorted[i].when)));
-    if (diffs.length) avgInterval = Math.round(diffs.reduce((a,b)=>a+b,0)/diffs.length);
-    const m=new Map(); for (const r of past) m.set(r.service_name,(m.get(r.service_name)||0)+1);
-    topService = [...m.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
-  }
-  return { past, upcoming, lastVisit, avgInterval, topService, visitCount: past.length };
-}
-
-// --- narracja (krótka i konkretna) ---
-function buildNarrativeHTML(client, stats, rows){
-  const prefs     = csvList(client.prefs, MAX_PREFS);
-  const allergies = csvList(client.allergies, MAX_ALLERGIES);
-  const contras   = csvList(client.contras, MAX_CONTRAS);
-
-  // scoring na podstawie ostatniego roku
-  const score = { shoulder:0, neck:0, thoracic:0, lumbar:0, forearm:0, stress:0, headache:0 };
-  const bump = (k,w)=> score[k]+=w;
-
-  for (const r of (rows||[])) {
-    const w = recencyWeight(r.when); if (!w) continue;
-    const txt = (r.notes||'' + ' ' + (r.service_name||'')).toLowerCase();
-    if (/(bark|barki|łopatk|obręcz)/.test(txt)) bump('shoulder', w);
-    if (/(szyj|kark)/.test(txt))                bump('neck', w);
-    if (/(piersiow)/.test(txt))                 bump('thoracic', w);
-    if (/(lędźw|lędz|dyskop|rwa)/.test(txt))    bump('lumbar', w);
-    if (/(przedrami|nadgarst|łokieć)/.test(txt))bump('forearm', w);
-    if (/(stres|przemęcz|bezsen)/.test(txt))    bump('stress', w);
-    if (/(migren|bóle głowy)/.test(txt))        bump('headache', w);
-  }
-  for (const [k,v] of Object.entries(client.treatmentNotes || {})) {
-    const when = String(k).split('|')[0];
-    const w = recencyWeight(when || new Date().toISOString());
-    const txt = String(v||'').toLowerCase();
-    if (/(bark|barki|łopatk|obręcz)/.test(txt)) bump('shoulder', w);
-    if (/(szyj|kark)/.test(txt))                bump('neck', w);
-    if (/(lędźw|lędz|dyskop|rwa)/.test(txt))    bump('lumbar', w);
-  }
-  const areasMap = {
-    shoulder: 'napięcie obręczy barkowej / górnych pleców',
-    neck:     'dyskomfort szyi',
-    thoracic: 'sztywność odcinka piersiowego',
-    lumbar:   'wrażliwość odcinka lędźwiowego',
-    forearm:  'przeciążenia przedramion / nadgarstków',
-    stress:   'wysokie napięcie ogólne',
-    headache: 'tendencja do bólów głowy'
-  };
-  const areas = Object.entries(score)
-    .sort((a,b)=>b[1]-a[1]).filter(([,v])=>v>0).slice(0, MAX_AREAS)
-    .map(([k])=>areasMap[k]);
-
-  const parts = [];
-  parts.push(`<p><b>Preferencje:</b> ${prefs.length ? prefs.join(', ') : 'brak szczególnych'}.</p>`);
-  const sec=[]; if (allergies.length) sec.push('alergie: '+allergies.join(', '));
-  if (contras.length) sec.push('ostrożność: '+contras.join(', '));
-  parts.push(`<p><b>Alergie/bezpieczeństwo:</b> ${sec.join('; ') || 'brak danych'}.</p>`);
-  const hist=[]; if (stats.visitCount) hist.push(`wizyt: ${stats.visitCount}`);
-  if (stats.topService) hist.push(`najczęściej: ${escapeHtml(stats.topService)}`);
-  if (stats.lastVisit) hist.push(`ostatnio: ${fmtDatePL(stats.lastVisit.when)}`);
-  if (stats.avgInterval) hist.push(`odstęp: ~${stats.avgInterval} dni`);
-  parts.push(`<p><b>Historia:</b> ${hist.join(' • ') || 'brak danych'}.</p>`);
-  parts.push(`<p><b>Dominujące obszary:</b> ${areas.length ? areas.join(', ') : 'brak jednoznacznych wskazań'}.</p>`);
-  // Hipoteza robocza (tylko w trybie szczegółowym)
-  if (SG_DETAILED){
-    const textAll = [
-      client.notes, client.prefs, client.contras,
-      ...Object.values(client.treatmentNotes||{}),
-      ...(rows||[]).map(r=>r.notes)
-    ].join(' ').toLowerCase();
-
-    let hypo = null;
-    if (/stolarn|praca fizyczna|manualn/.test(textAll) && /(bark|łopatk|szyj)/.test(textAll))
-      hypo = 'Przeciążeniowy wzorzec obręczy barkowej z komponentą szyjno-piersiową (overuse).';
-    else if (/(lędźw|dyskop|rwa)/.test(textAll))
-      hypo = 'Wrażliwość odcinka lędźwiowego – preferować techniki powierzchowne, bez kompresji.';
-    else if (/(stres|bezsen|przemęcz)/.test(textAll))
-      hypo = 'Dominujące napięcie ogólnoustrojowe (stres) – praca globalna, rytm kojący.';
-
-    if (hypo) parts.push(`<p><b>Hipoteza robocza:</b> ${escapeHtml(hypo)}</p>`);
-  }
-  // KONTEKST ŻYCIOWY – z klienta + uwag z rezerwacji (przeszłych i najbliższej)
-const allTextForCtx = gatherAllNotes(rows, (stats.upcoming && stats.upcoming[0]) || null, client);
-const ctx = extractContextFromNotes(allTextForCtx);
-const ctxBits = [];
-if (ctx.work === 'manual') ctxBits.push('praca fizyczna');
-if (ctx.work === 'desk')   ctxBits.push('praca siedząca/komputer');
-if (ctx.stress)            ctxBits.push('wysoki poziom stresu');
-if (ctx.sleep)             ctxBits.push('problemy ze snem');
-if (ctx.sports.includes('running'))  ctxBits.push('bieganie');
-if (ctx.sports.includes('strength')) ctxBits.push('trening siłowy');
-if (ctx.kids)              ctxBits.push('opieka nad dzieckiem');
-if (ctx.pets)              ctxBits.push('zwierzęta w domu');
-if (ctxBits.length) parts.push(`<p><b>Kontekst życiowy:</b> ${ctxBits.slice(0,3).join(' • ')}.</p>`);
-
-  return parts.join('\n');
-}
-// Zbierz wszystkie notatki i uwagi w jeden tekst (klient + rezerwacje + lokalne notatki)
-function gatherAllNotes(rows, next, client){
-  const arr = [];
-  if (client?.notes) arr.push(client.notes);
-  if (client?.prefs) arr.push(client.prefs);
-  if (client?.contras) arr.push(client.contras);
-  if (client?.treatmentNotes) arr.push(...Object.values(client.treatmentNotes));
-  if (Array.isArray(rows)) arr.push(...rows.map(r => r?.notes).filter(Boolean));
-  if (next?.notes) arr.push(next.notes);
-  return arr.join(' ');
-}
-
-// Wyciągnij kontekst życia z notatek/uwag
-function extractContextFromNotes(text){
-  const s = String(text||'').toLowerCase();
-  const ctx = { work:null, stress:false, sleep:false, pets:false, kids:false, pregnant:false, sports:[], likes:[], dislikes:[] };
-
-  // praca
-  if (/(stolarn|budow|magazyn|fizyczn|kierowc|kurier)/.test(s)) ctx.work = 'manual';
-  else if (/(biur|komputer|siedząc|home office|programist|grafik|call center)/.test(s)) ctx.work = 'desk';
-
-  // stan/tryb życia
-  if (/(stres|przemęcz|wypalen|nerw)/.test(s)) ctx.stress = true;
-  if (/(bezsen|sen|problemy ze snem|nie śpi|nie spi)/.test(s)) ctx.sleep = true;
-  if (/(pies|kot|zwierzak|zwierzę)/.test(s)) ctx.pets = true;
-  if (/(dzieck|niemowl|karmieni)/.test(s)) ctx.kids = true;
-  if (/(ciąża|ciężarn|preg)/.test(s)) ctx.pregnant = true;
-
-  // sport
-  if (/(biega|bieg|maraton|triatlon)/.test(s)) ctx.sports.push('running');
-  if (/(siłown|gym|ciężar)/.test(s)) ctx.sports.push('strength');
-  if (/(rower|kolar)/.test(s)) ctx.sports.push('cycling');
-
-  // preferencje z notatek
-  if (/(cisz|bez gadania|spokój)/.test(s)) ctx.likes.push('cisza');
-  if (/(ciepł|cieplo|gorąc)/.test(s)) ctx.likes.push('ciepło');
-  if (/(mocn|głęb)/.test(s)) ctx.likes.push('mocniejszy nacisk');
-  if (/(nie lub|nie chce|unika|mniej .*zapach|mniej czekolad|mniej arom)/.test(s)) ctx.dislikes.push('intensywne aromaty');
-
-  return ctx;
-}
-
-
-// --- plan terapeutyczny na najbliższy zabieg (krótki) ---
-function buildPlanList(client, stats, next, rows){
-  // wszystkie źródła (klient + historia + najbliższa rezerwacja)
-  const allNotes = gatherAllNotes(rows, next, client).toLowerCase();
-  const ctx = extractContextFromNotes(allNotes);
-
-  // preferencje/bezpieczeństwo (z klienta lub z notatek)
-  const likesHeat  = has(client.prefs, 'ciepł','gorąc') || /(ciepł|gorąc)/.test(allNotes);
-  const avoidCoco  = has(client.allergies, 'kokos')     || /kokos/.test(allNotes);
-  const prefStrong = has(client.prefs, 'mocn','głęb')   || /(mocny|głęb)/.test(allNotes);
-
-  // 1) Bezpieczeństwo / przygotowanie – PRIORYTET
-  const base = [];
-  if (likesHeat) base.push('Przygotować wyższy komfort cieplny; medium podgrzane.');
-  if (avoidCoco) base.push('Użyć medium bez kokosa; aromat łagodny / neutralny.');
-  if (has(client.contras,'ciąża','preg') || ctx.pregnant) base.push('Pozycje bezpieczne dla ciężarnych; bez punktów refleksyjnych.');
-  if (has(client.contras,'kręgosł','lędźw','dyskop')) base.push('Odc. L: powierzchownie; bez długich ucisków izometrycznych.');
-  if (ctx.stress) base.push('Tempo wolne, rytm kojący; pauzy oddechowe.');
-  if (ctx.sleep)  base.push('Zamknięcie: wyciszające techniki głowy/szyi.');
-
-  // 2) Rdzeń techniczny – dopasowanie do treści notatek + „sznyt” usługi
-  const tech = deriveTechniques(allNotes, next?.service_name);
-
-  // 3) Dodatki kontekstowe
-  if (ctx.work === 'manual') tech.unshift('Przedramiona/nadgarstki: rozluźnianie zginaczy + trakcje promieniowo-łokciowe.');
-  if (ctx.work === 'desk')   tech.unshift('Odc. piersiowy: wydłużenie piersiowych i mobilizacja scapularna (postawa biurowa).');
-  if (ctx.sports.includes('running')) tech.push('Łydki/powięź podeszwowa: striping + rozluźnienie mięśniowo-powięziowe.');
-  if (prefStrong) base.push('Nacisk zwiększać stopniowo; kontrola komfortu co 5–10 min.');
-
-  // 4) Uwagi klienta – z najbliższej rezerwacji LUB najświeższych wpisów
-  let quotedNote = '';
-  if (next?.notes) quotedNote = next.notes;
-  else {
-    const byNewest = (rows||[]).slice().sort((a,b)=> new Date(b.when)-new Date(a.when));
-    quotedNote = (byNewest.find(r => r?.notes)?.notes) || '';
-  }
-  if (quotedNote) base.push(`Uwaga klienta: „${escapeHtml(clip(quotedNote))}”.`);
-
-  // 5) Planowanie po zabiegu
-  if (stats.avgInterval) base.push(`Rytm wizyt: co ${stats.avgInterval<=21?'2–3':'3–4'} tygodnie.`);
-  base.push('After-care: nawodnienie + 1–2 ćwiczenia mobilizacji barków / oddech.');
-
-  // 6) Priorytety: bezpieczeństwo(base) > techniki > dodatki; limit wg trybu
-  return uniqCap([...base, ...tech], planLimit());
-}
-
-
-
-// --- render sekcji „Sugestie” (plan + narracja) ---
-async function renderSuggestions(){
-  const box = document.getElementById('cd-section-suggestions'); if (!box) return;
-
-  const out = await fetchClientBookings({ email: client.email, phone: client.phone });
-  const stats = analyzeHistory(out.rows || []);
-  const next  = stats.upcoming[0] || null;
-const planTextHTML = buildPlanNarrative(client, stats, next, out.rows || []);
-
-
-  const narrative = buildNarrativeHTML(client, stats, out.rows || []);
-// === PLAN JAKO NARRACJA (ciągły tekst) ===
-function buildPlanNarrative(client, stats, next, rows){
-  const whenTxt = next ? fmtDatePL(next.when) : '—';
-  const service = next?.service_name || '-';
-
-  // zebrany tekst + kontekst
-  const allNotes = gatherAllNotes(rows, next, client).toLowerCase();
-  const ctx = extractContextFromNotes(allNotes);
-
-  // preferencje / bezpieczeństwo / „smaczki” z uwag
-  const likesHeat  = has(client.prefs, 'ciepł','gorąc') || /(ciepł|gorąc)/.test(allNotes);
-  const prefStrong = has(client.prefs, 'mocn','głęb')    || /(mocn|głęb)/.test(allNotes);
-  const avoidCoco  = has(client.allergies, 'kokos')      || /\bkokos\b/.test(allNotes);
-  const lessChoco  = /(mniej .*czekolad|mniej arom)/.test(allNotes);
-  const warmerOil  = /(cieplejszy olejek|olejek cieplejszy|bardziej ciepły)/.test(allNotes);
-  const longTowel  = /(dłuższy ręcznik|dluzszy recznik)/.test(allNotes);
-
-  // obszary pracy wywnioskowane z notatek/kontekstu
-  const shoulder = /(bark|barki|łopatk|obręcz)/.test(allNotes) || ctx.work === 'manual';
-  const lumbar   = /(lędźw|lędz|dyskop|rwa)/.test(allNotes) || has(client.contras,'lędźw','kręgosł');
-  const forearm  = /(przedrami|nadgarst|łokieć)/.test(allNotes) || ctx.work === 'manual';
-
-  // akapity
-  const parts = [];
-
-  // wprowadzenie / przygotowanie
-  const prep = [];
-  if (likesHeat) prep.push('przygotuj cieplejsze stanowisko i podgrzane medium');
-  if (avoidCoco) prep.push('użyj oleju bez kokosa');
-  if (lessChoco) prep.push('zapach czekolady trzymaj na minimalnym poziomie');
-  if (warmerOil) prep.push('przed startem potwierdź komfort temperatury olejku');
-  if (longTowel) prep.push('przygotuj dłuższy ręcznik do okrycia');
-  if (ctx.pets)  prep.push('poproś, by zwierzęta były w innym pomieszczeniu');
-  parts.push(
-    `Zabieg ${escapeHtml(service)} w dniu ${escapeHtml(whenTxt)} rozpocznij od spokojnego wprowadzenia: `
-    + (prep.length ? prep.join(', ') + '. ' : '')
-    + `W tle włącz muzykę relaksacyjną. Rozgrzej tkanki długimi, płynnymi przesunięciami i płynnie przejdź do pracy właściwej.`
-  );
-
-  // część główna – barki/piersiowy
-  if (shoulder || SG_DETAILED){
-    const more = SG_DETAILED ? ' (30–60 sekund na punkt, 2–3 powtórzenia)' : '';
-    parts.push(
-      `W części głównej połóż akcent na obręcz barkową: rozpracuj punkty spustowe górnego czworobocznego i dźwigacza łopatki${more}, `
-      + `a następnie wykonaj mobilizacje łopatki — ślizgi scapulothoracic z delikatną depresją i rotacją w odciążeniu. `
-      + `Grzbiet piersiowy opracuj powolnym przesuwem przedramienia wzdłuż pasm przykręgosłupowych, utrzymując tempo wolne do umiarkowanego.`
-    );
-  }
-
-  // odcinek lędźwiowy – ostrożność
-  if (lumbar){
-    parts.push(
-      `W odcinku lędźwiowym pracuj wyłącznie powierzchownie z uwagi na wcześniejsze dolegliwości — `
-      + `bez długich ucisków izometrycznych i bez pracy na wyrostkach kolczystych. `
-      + (SG_DETAILED ? `Na mięśniu czworobocznym lędźwi wykonaj krótkie uciski statyczne połączone z wydłużeniem w wydechu.` : '')
-    );
-  }
-
-  // przedramiona / nadgarstki
-  if (forearm){
-    parts.push(
-      `Jeśli wyczuwasz przeciążenia od pracy rąk, wpleć moduł na przedramiona i nadgarstki — `
-      + `striping oraz poprzeczne frikcje zginaczy, a następnie łagodne trakcje i ślizgi promieniowo-łokciowe o małej amplitudzie.`
-    );
-  }
-
-  // sterowanie naciskiem + komunikacja
-  const comms = [];
-  if (prefStrong) comms.push('możesz stopniowo zwiększać nacisk, regularnie sprawdzając komfort');
-  comms.push('utrzymuj płynny rytm i na koniec wróć do długich głaskań i wyciszenia');
-  parts.push(comms.join(', ') + '.');
-
-  // after-care / planowanie
-  const after = [];
-  after.push('zachęć do nawodnienia');
-  after.push('pokaż dwie proste praktyki: mobilizacja barków (łopatki) i spokojny oddech z wydłużonym wydechem');
-  if (stats?.avgInterval) after.push(`zaproponuj rytm wizyt co ${stats.avgInterval <= 21 ? '2–3' : '3–4'} tygodnie`);
-  parts.push('Po zabiegu ' + after.join(', ') + '.');
-
-  // scal na HTML
-  return parts.map(p => `<p>${escapeHtml(p)}</p>`).join('\n');
-}
-
-  const nextHdr = next ? `${fmtDatePL(next.when)} • ${escapeHtml(next.service_name||'-')}` : 'brak zaplanowanego zabiegu';
-
-box.innerHTML = `
-  <div class="card" style="margin-bottom:12px">
-    <div style="display:flex; gap:12px; align-items:center; justify-content:space-between">
-      <h3 style="margin:6px 0">Sugestie terapeutyczne – najbliższa wizyta (${nextHdr})</h3>
-      <label style="display:flex; gap:6px; align-items:center; font-weight:500">
-        <input type="checkbox" id="sg-detailed" ${SG_DETAILED?'checked':''}/> Szczegółowy
-      </label>
-    </div>
-    <div id="sg-plan" style="line-height:1.6">${planTextHTML}</div>
-    <div style="margin-top:8px">
-      <button id="sg-save-plan" class="btn">Zapisz plan do Notatek</button>
-      <button id="sg-copy-plan" class="btn">Kopiuj plan</button>
-	  <button class="btn" id="cd-prompt-btn">Prompt (AI)</button>
-
-    </div>
-  </div>
-
-  <div class="card">
-    <h3 style="margin:6px 0">Narracja kliniczna (podsumowanie klienta)</h3>
-    <div id="sg-narrative" style="line-height:1.5">${narrative}</div>
-    <div style="margin-top:8px">
-      <button id="sg-save-narr" class="btn">Zapisz narrację do Notatek</button>
-      <button id="sg-copy-narr" class="btn">Kopiuj narrację</button>
-    </div>
-  </div>
-`;
-wirePromptButton();
-
-
-  const saveBlock = async (title, text) => {
-    const list = clientsLoad(); const idx = list.findIndex(x=>x.id === id); if (idx < 0) return;
-    const stamp = new Date().toLocaleDateString('pl-PL');
-    list[idx].notes = (list[idx].notes || '') + `\n--- ${title} ${stamp} ---\n` + text + '\n';
-    const {error}=await sb.from('clients').update({notes:list[idx].notes}).eq('id',id);
-    if(error){alert(`Nie zapisano: ${error.message}`);return}clientsSave(list); client = list[idx]; alert('Zapisano do Notatek.');
-  };
-document.getElementById('sg-detailed')?.addEventListener('change', async (e)=>{
-  SG_DETAILED = !!e.target.checked;
-  await renderSuggestions();           // prze-renderuj w nowym trybie
-  showSection('cd-section-suggestions');
-});
-
-  document.getElementById('sg-save-plan')?.addEventListener('click', () => {
-    const txt = plan.map(x => '• '+ x.replace(/<[^>]+>/g,'')).join('\n');
-    saveBlock('Plan terapeutyczny', txt);
-  });
-  document.getElementById('sg-save-narr')?.addEventListener('click', () => {
-    const raw = document.getElementById('sg-narrative')?.innerText || '';
-    const safe = raw.split('\n').map(x => clip(x, 220)).join('\n'); // krótkie linie
-    saveBlock('Narracja kliniczna', safe);
-  });
-}
-
-  // Normalizacja identyfikatorów
-  function normEmail(e){ return String(e||'').trim().toLowerCase(); }
-  function normPhone(p){ return String(p||'').replace(/[^\d+]/g,''); }
-
-  // Dane klienta pozostają w Supabase; lokalnie trzymana jest tylko bieżąca kopia w pamięci.
   let clientsMemory = [];
-  function clientsLoad(){
-    return clientsMemory;
-  }
-  function clientsSave(list){
-    clientsMemory = Array.isArray(list) ? list : [];
+  let client = null;
+  let extendedSchemaAvailable = true;
+  let advisorConversation = [];
+  let advisorUiMessages = [];
+  let advisorScope = 'client';
+
+  const clientsLoad = () => clientsMemory;
+  const clientsSave = (list) => { clientsMemory = Array.isArray(list) ? list : []; };
+
+  function briefingList(items, renderItem) {
+    const rows = Array.isArray(items) ? items : [];
+    if (!rows.length) return '<p class="muted briefing-empty">Brak zapisanych informacji.</p>';
+    return `<ul class="briefing-list">${rows.map((item) => `<li>${renderItem(item)}</li>`).join('')}</ul>`;
   }
 
-  // ===== SECTIONS =====
-  function showSection(id){
-    const ids = [
-      'cd-section-suggestions',
-      'cd-section-upcoming',
-      'cd-section-history',
-      'cd-section-contact',
-      'cd-section-notes'
+  function renderBriefingResult(briefing, generatedAt) {
+    if (!briefing || typeof briefing !== 'object') {
+      return '<div class="briefing-placeholder"><strong>Nie ma jeszcze aktualnej odprawy.</strong><p>Uzupełnij kartę klienta, a następnie wybierz „Przygotuj odprawę”.</p></div>';
+    }
+    const source = (value) => value ? `<small>Źródło: ${escapeHtml(value)}</small>` : '';
+    const simple = (items) => briefingList(items, (item) => escapeHtml(item));
+    const alerts = briefingList(briefing.safety_alerts, (item) =>
+      `<span class="briefing-level briefing-level-${escapeHtml(item?.level || 'informacja')}">${escapeHtml(item?.level || 'informacja')}</span><strong>${escapeHtml(item?.text || '')}</strong>${source(item?.source)}`
+    );
+    const plan = briefingList(briefing.today_plan, (item) =>
+      `<strong>${escapeHtml(item?.text || '')}</strong><span>${escapeHtml(item?.reason || '')}</span>${source(item?.source)}`
+    );
+    const continuity = briefing.continuity || {};
+    const context = briefing.client_context || {};
+    const relationship = briefing.relationship || {};
+    const stamp = generatedAt ? fmtDateTimePL(generatedAt) : '';
+    return `
+      <section class="briefing-summary"><p>${escapeHtml(briefing.summary || '')}</p>${stamp ? `<small>Odprawa z ${escapeHtml(stamp)}</small>` : ''}</section>
+      <div class="briefing-grid">
+        <section class="briefing-card briefing-safety"><p class="eyebrow">Najpierw sprawdź</p><h3>Bezpieczeństwo</h3>${alerts}</section>
+        <section class="briefing-card"><p class="eyebrow">Najbliższa wizyta</p><h3>Plan na dziś</h3>${plan}</section>
+        <section class="briefing-card"><p class="eyebrow">Stałe informacje</p><h3>Preferencje</h3>${simple(briefing.preferences)}</section>
+        <section class="briefing-card briefing-work"><p class="eyebrow">Ciągłość zabiegów</p><h3>Poprzednie wizyty</h3><p>${escapeHtml(continuity.last_visit || 'Brak danych.')}</p><h4>Co się sprawdziło</h4>${simple(continuity.what_worked)}<h4>Co się zmieniło</h4>${simple(continuity.what_changed)}<h4>Co sprawdzić dzisiaj</h4>${simple(continuity.check_today)}</section>
+        <section class="briefing-card briefing-context"><p class="eyebrow">Codzienny kontekst</p><h3>Praca i samopoczucie</h3><h4>Praca i obciążenia</h4>${simple(context.work_and_load)}<h4>Sen, stres i samopoczucie</h4>${simple(context.wellbeing)}<h4>Kontekst życia</h4>${simple(context.life_context)}</section>
+        <section class="briefing-card briefing-relationship"><p class="eyebrow">Pamięć relacyjna</p><h3>Warto pamiętać</h3>${simple(relationship.remember)}<h4>Naturalne pytania</h4>${simple(relationship.natural_questions)}<h4>Nie poruszaj samodzielnie</h4>${simple(relationship.avoid)}</section>
+        <section class="briefing-card"><p class="eyebrow">Przed rozpoczęciem</p><h3>Pytania kontrolne</h3>${simple(briefing.questions_before_treatment)}</section>
+        <section class="briefing-card"><p class="eyebrow">Po zabiegu</p><h3>Ostrożna opieka domowa</h3>${simple(briefing.aftercare)}</section>
+        <section class="briefing-card briefing-uncertain"><p class="eyebrow">Do zweryfikowania</p><h3>Niepewne, sprzeczne lub stare dane</h3>${simple(briefing.uncertainties)}</section>
+      </div>`;
+  }
+
+  function renderAdvisorAnswer(answer) {
+    const list = (title, items) => {
+      const rows = Array.isArray(items) ? items : [];
+      if (!rows.length) return '';
+      return `<h4>${escapeHtml(title)}</h4><ul>${rows.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`;
+    };
+    return `
+      <div>${escapeHtml(answer?.answer || 'Brak odpowiedzi.')}</div>
+      ${list('Proponowane kroki', answer?.suggested_actions)}
+      ${list('Bezpieczeństwo', answer?.safety_notes)}
+      ${answer?.uncertainty ? `<h4>Niepewność</h4><div>${escapeHtml(answer.uncertainty)}</div>` : ''}
+      ${Array.isArray(answer?.sources) && answer.sources.length ? `<div class="advisor-sources"><strong>Podstawa odpowiedzi:</strong> ${answer.sources.map(escapeHtml).join(' • ')}</div>` : ''}`;
+  }
+
+  function conversationText(answer) {
+    const actions = Array.isArray(answer?.suggested_actions) ? answer.suggested_actions.join('; ') : '';
+    return [answer?.answer || '', actions ? `Kroki: ${actions}` : '', answer?.uncertainty ? `Niepewność: ${answer.uncertainty}` : '']
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  function renderAdvisorMessages() {
+    const box = document.getElementById('advisor-messages');
+    if (!box) return;
+    if (!advisorUiMessages.length) {
+      box.innerHTML = advisorScope === 'general'
+        ? '<div class="advisor-message system">Zapytaj o recepturę, kosmetyk, pielęgnację albo pomysł dla SPA. Ten tryb nie korzysta z danych klienta.</div>'
+        : '<div class="advisor-message system">Zapytaj o plan zabiegu, bezpieczeństwo, zmiany od ostatniej wizyty albo informacje, o których warto pamiętać w rozmowie.</div>';
+      return;
+    }
+    box.innerHTML = advisorUiMessages.map((message) => {
+      if (message.role === 'assistant') return `<div class="advisor-message assistant">${renderAdvisorAnswer(message.answer)}</div>`;
+      return `<div class="advisor-message user">${escapeHtml(message.content)}</div>`;
+    }).join('');
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function setAdvisorStatus(message = '', isError = false) {
+    const status = document.getElementById('advisor-status');
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle('error', isError);
+  }
+
+  async function callAdvisor(payload) {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session?.access_token) throw new Error('Sesja administratora wygasła. Zaloguj się ponownie.');
+    const res = await fetch('/.netlify/functions/client-advisor', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ client_id: id, ...payload }),
+      cache: 'no-store',
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || 'Doradca nie odpowiedział.');
+    return body;
+  }
+
+  async function generateBriefing(button) {
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Analizuję historię…';
+    setAdvisorStatus('Przygotowuję odprawę na podstawie aktualnych danych klienta.');
+    try {
+      const payload = await callAdvisor({ mode: 'briefing' });
+      client.briefing_json = payload.briefing;
+      client.briefing_generated_at = payload.generated_at;
+      const target = document.getElementById('briefing-result');
+      if (target) target.innerHTML = renderBriefingResult(payload.briefing, payload.generated_at);
+      button.textContent = 'Odśwież odprawę';
+      setAdvisorStatus('Odprawa jest wyświetlana tylko na tej stronie i nie została zapisana w kartotece.');
+    } catch (error) {
+      button.textContent = original;
+      setAdvisorStatus(error.message || 'Nie udało się przygotować odprawy.', true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function sendAdvisorQuestion() {
+    const input = document.getElementById('advisor-question');
+    const button = document.getElementById('advisor-send');
+    const question = String(input?.value || '').trim();
+    if (!question || !button) return;
+    advisorUiMessages.push({ role: 'user', content: question });
+    renderAdvisorMessages();
+    input.value = '';
+    const normalizedQuestion = question.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+    const saveCommand = advisorScope === 'general' && /^(zapisz|zapisz przepis)$/.test(normalizedQuestion);
+    if (saveCommand) {
+      const lastIdeaIndex = advisorUiMessages.map((item, index) => ({ item, index })).reverse()
+        .find(({ item }) => item.role === 'assistant' && item.recipe_save_allowed === true && item.answer?.idea_content)?.index;
+      if (lastIdeaIndex === undefined) {
+        advisorUiMessages.push({ role: 'assistant', answer: { answer: 'Nie mam jeszcze przepisu do zapisania. Najpierw napisz: „napisz przepis na…”.', safety_notes: [], suggested_actions: [], sources: [], uncertainty: '' } });
+        renderAdvisorMessages();
+        return;
+      }
+      try {
+        await saveIdea(lastIdeaIndex);
+        advisorUiMessages.push({ role: 'assistant', answer: { answer: 'Zapisałam ostatni przepis w zakładce Pomysły.', safety_notes: [], suggested_actions: [], sources: [], uncertainty: '' } });
+        renderAdvisorMessages();
+      } catch (error) {
+        setAdvisorStatus(error.message || 'Nie udało się zapisać pomysłu.', true);
+      }
+      return;
+    }
+    input.disabled = true;
+    button.disabled = true;
+    setAdvisorStatus(advisorScope === 'general' ? 'Doradca przygotowuje pomysł SPA bez danych klienta…' : 'Doradca analizuje kartę klienta i historię wizyt…');
+    try {
+      const payload = await callAdvisor({ mode: advisorScope === 'general' ? 'general' : 'chat', question, conversation: advisorConversation });
+      const answer = payload.answer || {};
+      const recipeSaveAllowed = advisorScope === 'general' && /\b(przepis|receptur)/.test(normalizedQuestion);
+      advisorUiMessages.push({ role: 'assistant', answer, recipe_save_allowed: recipeSaveAllowed });
+      advisorConversation.push({ role: 'user', content: question });
+      advisorConversation.push({ role: 'assistant', content: conversationText(answer) });
+      advisorConversation = advisorConversation.slice(-8);
+      renderAdvisorMessages();
+      setAdvisorStatus(advisorScope === 'general'
+        ? (recipeSaveAllowed ? 'Przepis nie został zapisany. Jeśli chcesz go zachować, napisz teraz: „zapisz”.' : 'Odpowiedź nie została zapisana.')
+        : 'Odpowiedź jest sugestią do weryfikacji przez terapeutkę.');
+    } catch (error) {
+      advisorUiMessages.push({ role: 'assistant', answer: { answer: error.message || 'Nie udało się uzyskać odpowiedzi.', safety_notes: [], suggested_actions: [], sources: [], uncertainty: '' } });
+      renderAdvisorMessages();
+      setAdvisorStatus(error.message || 'Nie udało się uzyskać odpowiedzi.', true);
+    } finally {
+      input.disabled = false;
+      button.disabled = false;
+      input.focus();
+    }
+  }
+
+  async function saveIdea(messageIndex) {
+    const message = advisorUiMessages[Number(messageIndex)];
+    const answer = message?.answer;
+    if (!answer?.idea_content) return;
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) throw new Error('Sesja administratora wygasła.');
+    const { error } = await sb.from('ideas').insert({
+      title: String(answer.idea_title || 'Pomysł SPA').slice(0, 180),
+      category: String(answer.idea_category || 'Inspiracja').slice(0, 80),
+      content: String(answer.idea_content).slice(0, 12000),
+      created_by: session.user.id,
+    });
+    if (error) throw new Error(error.message.includes('ideas') ? 'Uruchom migrację Pomysłów w Supabase.' : error.message);
+    setAdvisorStatus('Pomysł został zapisany w zakładce Pomysły.');
+  }
+
+  function switchAdvisorScope(nextScope) {
+    advisorScope = nextScope === 'general' ? 'general' : 'client';
+    advisorConversation = [];
+    advisorUiMessages = [];
+    document.querySelectorAll('[data-advisor-scope]').forEach((button) => {
+      const active = button.getAttribute('data-advisor-scope') === advisorScope;
+      button.classList.toggle('primary', active);
+      button.classList.toggle('ghost', !active);
+    });
+    const heading = document.getElementById('advisor-mode-title');
+    const description = document.getElementById('advisor-mode-description');
+    const input = document.getElementById('advisor-question');
+    if (heading) heading.textContent = advisorScope === 'general' ? 'Pomysły SPA' : 'Zapytaj o tego klienta';
+    if (description) description.textContent = advisorScope === 'general'
+      ? 'Ogólne receptury i inspiracje. Dane klienta nie są używane.'
+      : 'Rozmowa dotyczy wyłącznie otwartej karty i nie zapisuje się w kartotece.';
+    if (input) input.placeholder = advisorScope === 'general'
+      ? 'Np. podaj bezpieczny pomysł na wodę różaną do domowego rytuału SPA.'
+      : 'Np. co najważniejszego pamiętać o tym kliencie przed wizytą?';
+    const quick = document.getElementById('advisor-quick');
+    const questions = advisorScope === 'general' ? [
+      'Napisz przepis na wodę różaną do domowego rytuału SPA.',
+      'Zaproponuj prosty rytuał pielęgnacyjny po masażu.',
+      'Podaj pomysł na sezonowy kosmetyk lub dodatek do oferty.',
+    ] : [
+      'Przygotuj krótki plan dzisiejszego zabiegu.',
+      'Na co szczególnie uważać przed rozpoczęciem?',
+      'Co zmieniło się od poprzednich wizyt?',
+      'Jakie pytania zadać klientowi przed masażem?',
+      'Co warto pamiętać z życia klienta?',
     ];
-    ids.forEach(x => document.getElementById(x)?.classList.add('hidden'));
-    document.getElementById(id)?.classList.remove('hidden');
+    if (quick) {
+      quick.innerHTML = questions.map((question) => `<button type="button" data-advisor-question="${escapeHtml(question)}">${escapeHtml(question)}</button>`).join('');
+    }
+    renderAdvisorMessages();
+    setAdvisorStatus('');
+  }
+
+  async function renderSuggestions() {
+    const box = document.getElementById('cd-section-suggestions');
+    if (!box) return;
+    if (!extendedSchemaAvailable) {
+      box.innerHTML = '<div class="briefing-placeholder"><strong>Brakuje pól doradcy w Supabase.</strong><p>Uruchom migrację <code>202609240002_client_advisor.sql</code>, a następnie odśwież stronę.</p></div>';
+      return;
+    }
+    const savedBits = [
+      client.prefs, client.allergies, client.contras, client.notes,
+      client.current_complaints, client.work_context, client.wellbeing_context,
+      client.relationship_context, client.conversation_followups, client.avoid_topics,
+    ].filter((value) => String(value || '').trim()).length;
+    const quickQuestions = [
+      'Przygotuj krótki plan dzisiejszego zabiegu.',
+      'Na co szczególnie uważać przed rozpoczęciem?',
+      'Co zmieniło się od poprzednich wizyt?',
+      'Jakie pytania zadać klientowi przed masażem?',
+      'Co warto pamiętać z życia klienta?',
+    ];
+    box.innerHTML = `
+      <div class="advisor-shell">
+        <section>
+          <div class="briefing-head">
+            <div><p class="eyebrow">Przed wizytą</p><h2>Doradca klienta</h2><p class="muted">Analizuje wcześniejsze wizyty, dolegliwości, uczulenia, pracę, samopoczucie i pamięć relacyjną.</p></div>
+            <div class="advisor-actions"><button id="briefing-generate" class="btn primary" type="button">${client.briefing_json ? 'Odśwież odprawę' : 'Przygotuj odprawę'}</button></div>
+          </div>
+          <div class="briefing-data-note"><strong>Karta klienta: ${savedBits} z 10 obszarów zawiera dane.</strong> Doradca nie stawia diagnozy i nie zastępuje oceny terapeutki. Imię, adres i dane kontaktowe nie są wysyłane do modelu.</div>
+          <div id="briefing-result">${renderBriefingResult(client.briefing_json, client.briefing_generated_at)}</div>
+        </section>
+        <section class="advisor-chat" aria-label="Pisemny doradca klienta">
+          <div class="advisor-scope-switch"><button class="btn primary" type="button" data-advisor-scope="client">Klient</button><button class="btn ghost" type="button" data-advisor-scope="general">Pomysły SPA</button></div>
+          <div class="advisor-chat-head"><div><h3 id="advisor-mode-title">Zapytaj o tego klienta</h3><p id="advisor-mode-description">Rozmowa dotyczy wyłącznie otwartej karty i nie zapisuje się w kartotece.</p></div><button id="advisor-clear" class="text-btn" type="button">Wyczyść rozmowę</button></div>
+          <div id="advisor-quick" class="advisor-quick">${quickQuestions.map((question) => `<button type="button" data-advisor-question="${escapeHtml(question)}">${escapeHtml(question)}</button>`).join('')}</div>
+          <div id="advisor-messages" class="advisor-messages" aria-live="polite"></div>
+          <div class="advisor-composer"><textarea id="advisor-question" rows="2" maxlength="2000" placeholder="Np. jak dostosować dzisiejszy masaż do ostatnich dolegliwości?"></textarea><button id="advisor-send" class="btn primary" type="button">Wyślij</button></div>
+          <p id="advisor-status" class="advisor-status"></p>
+        </section>
+        <p class="advisor-disclaimer">Sugestie AI wymagają oceny terapeutki. W razie czerwonych flag, niejasnego przeciwwskazania lub pogorszenia objawów pierwszeństwo ma bezpieczeństwo i konsultacja z odpowiednim specjalistą.</p>
+      </div>`;
+    renderAdvisorMessages();
+    document.getElementById('briefing-generate')?.addEventListener('click', (event) => generateBriefing(event.currentTarget));
+    document.getElementById('advisor-send')?.addEventListener('click', sendAdvisorQuestion);
+    document.getElementById('advisor-question')?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        sendAdvisorQuestion();
+      }
+    });
+    document.getElementById('advisor-clear')?.addEventListener('click', () => {
+      advisorConversation = [];
+      advisorUiMessages = [];
+      renderAdvisorMessages();
+      setAdvisorStatus('Rozmowa została wyczyszczona. Odprawa klienta pozostaje zapisana.');
+    });
+    box.querySelectorAll('[data-advisor-scope]').forEach((button) => button.addEventListener('click', () => switchAdvisorScope(button.getAttribute('data-advisor-scope'))));
+    box.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-advisor-question]');
+      if (!button) return;
+      const input = document.getElementById('advisor-question');
+      if (input) input.value = button.getAttribute('data-advisor-question') || '';
+      sendAdvisorQuestion();
+    });
+  }
+
+  function showSection(sectionId) {
+    const sections = ['cd-section-suggestions', 'cd-section-upcoming', 'cd-section-history', 'cd-section-contact', 'cd-section-notes'];
+    sections.forEach((value) => document.getElementById(value)?.classList.add('hidden'));
+    document.getElementById(sectionId)?.classList.remove('hidden');
     const activeButton = {
       'cd-section-upcoming': 'cd-btn-upcoming',
       'cd-section-suggestions': 'cd-btn-suggestions',
       'cd-section-history': 'cd-btn-history',
       'cd-section-contact': 'cd-btn-contact',
-      'cd-section-notes': 'cd-btn-notes'
-    }[id];
-    ['cd-btn-upcoming','cd-btn-suggestions','cd-btn-history','cd-btn-contact','cd-btn-notes']
-      .forEach(buttonId => document.getElementById(buttonId)?.classList.toggle('active', buttonId === activeButton));
+      'cd-section-notes': 'cd-btn-notes',
+    }[sectionId];
+    ['cd-btn-upcoming', 'cd-btn-suggestions', 'cd-btn-history', 'cd-btn-contact', 'cd-btn-notes']
+      .forEach((buttonId) => document.getElementById(buttonId)?.classList.toggle('active', buttonId === activeButton));
   }
 
-  // ===== LOAD CLIENT =====
-  const id = qs.get('id');
-  const {data:clientRow,error:clientError}=await sb.from('clients').select('id,name,email,phone,address,prefs,allergies,contras,notes,treatment_notes').eq('id',id).single();
-  let client = clientRow ? {...clientRow,treatmentNotes:clientRow.treatment_notes||{}} : null;
+  async function loadClient() {
+    const extendedFields = 'id,name,email,phone,address,prefs,allergies,contras,notes,treatment_notes,current_complaints,work_context,wellbeing_context,relationship_context,conversation_followups,avoid_topics,briefing_json,briefing_generated_at';
+    let result = await sb.from('clients').select(extendedFields).eq('id', id).single();
+    if (result.error) {
+      extendedSchemaAvailable = false;
+      result = await sb.from('clients').select('id,name,email,phone,address,prefs,allergies,contras,notes,treatment_notes').eq('id', id).single();
+    }
+    if (result.error || !result.data) return null;
+    return { ...result.data, treatmentNotes: result.data.treatment_notes || {} };
+  }
+
+  async function fetchClientBookings() {
+    const email = normEmail(client?.email);
+    const phone = normPhone(client?.phone);
+    if (!email && !phone) return { rows: [], reason: 'Brak e-maila/telefonu u klienta' };
+    let query = sb.from('bookings_view').select('*').order('when', { ascending: true });
+    const filters = [];
+    if (email) filters.push(`client_email.ilike.${email}`);
+    if (phone) filters.push(`phone.eq.${phone}`);
+    query = query.or(filters.join(','));
+    const { data, error } = await query;
+    if (error) return { rows: [], reason: error.message };
+    return { rows: data || [], reason: null };
+  }
+
+  function noteFor(row) {
+    return row.notes ?? row.note ?? row.admin_notes ?? row.uwagi ?? row.comment ?? row.comments ?? row.remark ?? row.remarks ?? '';
+  }
+
+  async function renderUpcoming() {
+    const out = await fetchClientBookings();
+    const tbody = document.getElementById('cd-upcoming-rows');
+    if (!tbody) return;
+    if (out.reason && !out.rows.length) {
+      tbody.innerHTML = `<tr><td colspan="4">${escapeHtml(out.reason)}</td></tr>`;
+      return;
+    }
+    const rows = out.rows.filter((row) => new Date(row.when) >= new Date() && row.status !== 'Anulowana');
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="4">Brak nadchodzących</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map((row) => `
+      <tr><td>${escapeHtml(fmtDateTimePL(row.when))}</td><td>${escapeHtml(row.service_name || '-')}</td><td>${escapeHtml(row.status || '-')}</td><td>${escapeHtml(noteFor(row) || '-')}</td></tr>`).join('');
+  }
+
+  async function renderHistory() {
+    const out = await fetchClientBookings();
+    const tbody = document.getElementById('cd-history-rows');
+    if (!tbody) return;
+    if (out.reason && !out.rows.length) {
+      tbody.innerHTML = `<tr><td colspan="4">${escapeHtml(out.reason)}</td></tr>`;
+      return;
+    }
+    const rows = out.rows
+      .filter((row) => new Date(row.when) < new Date() && row.status !== 'Anulowana')
+      .sort((a, b) => new Date(b.when) - new Date(a.when));
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="4">Brak historii</td></tr>';
+      return;
+    }
+    const localNotes = client.treatmentNotes || {};
+    tbody.innerHTML = rows.map((row) => {
+      const key = row.booking_no || `${row.when}|${row.service_name || ''}`;
+      return `
+        <tr data-key="${encodeURIComponent(key)}">
+          <td>${escapeHtml(fmtDateTimePL(row.when))}</td><td>${escapeHtml(row.service_name || '-')}</td><td>${escapeHtml(row.status || '-')}</td>
+          <td><div style="display:flex;gap:6px;align-items:flex-start"><textarea class="hist-note" rows="2" style="min-width:260px">${escapeHtml(localNotes[key] || '')}</textarea><button class="btn" data-save-hist="${encodeURIComponent(key)}">Zapisz</button></div></td>
+        </tr>`;
+    }).join('');
+  }
+
+  function setBtnCount(buttonId, label, count) {
+    const button = document.getElementById(buttonId);
+    if (button) button.textContent = `${label} (${count})`;
+  }
+
+  async function refreshCounts() {
+    const out = await fetchClientBookings();
+    const now = new Date();
+    setBtnCount('cd-btn-upcoming', 'Nadchodzące', out.rows.filter((row) => new Date(row.when) >= now && row.status !== 'Anulowana').length);
+    setBtnCount('cd-btn-history', 'Historia zabiegów', out.rows.filter((row) => new Date(row.when) < now && row.status !== 'Anulowana').length);
+  }
+
+  function loadNotesToForm() {
+    $('#cd-prefs').value = client.prefs || '';
+    $('#cd-allergies').value = client.allergies || '';
+    $('#cd-contras').value = client.contras || '';
+    $('#cd-complaints').value = client.current_complaints || '';
+    $('#cd-work-context').value = client.work_context || '';
+    $('#cd-wellbeing').value = client.wellbeing_context || '';
+    $('#cd-notes').value = client.notes || '';
+    $('#cd-relationship').value = client.relationship_context || '';
+    $('#cd-followups').value = client.conversation_followups || '';
+    $('#cd-avoid-topics').value = client.avoid_topics || '';
+  }
+
+  async function saveNotesFromForm() {
+    const list = clientsLoad();
+    const index = list.findIndex((item) => item.id === id);
+    if (index < 0) return;
+    const updates = {
+      prefs: $('#cd-prefs')?.value || '',
+      allergies: $('#cd-allergies')?.value || '',
+      contras: $('#cd-contras')?.value || '',
+      notes: $('#cd-notes')?.value || '',
+    };
+    if (extendedSchemaAvailable) {
+      updates.relationship_context = $('#cd-relationship')?.value || '';
+      updates.conversation_followups = $('#cd-followups')?.value || '';
+      updates.avoid_topics = $('#cd-avoid-topics')?.value || '';
+      updates.current_complaints = $('#cd-complaints')?.value || '';
+      updates.work_context = $('#cd-work-context')?.value || '';
+      updates.wellbeing_context = $('#cd-wellbeing')?.value || '';
+    }
+    const { error } = await sb.from('clients').update(updates).eq('id', id);
+    if (error) {
+      alert(`Nie zapisano: ${error.message}`);
+      return;
+    }
+    Object.assign(list[index], updates);
+    clientsSave(list);
+    client = list[index];
+    alert('Zapisano.');
+  }
+
+  client = await loadClient();
   clientsSave(client ? [client] : []);
   if (!client) {
-    document.body.innerHTML = '<div class="container"><p>Nie znaleziono klienta.</p><p><a href="index.html#clients">Wróć</a></p></div>';
+    document.body.innerHTML = '<div class="container"><p>Nie znaleziono klienta albo sesja administratora wygasła.</p><p><a href="index.html#clients">Wróć</a></p></div>';
     return;
   }
 
-  // Header + kontakt na starcie
   $('#cd-title').textContent = client.name || 'Szczegóły klienta';
-  const avatar = document.querySelector('.client-avatar-large');
+  const avatar = $('.client-avatar-large');
   if (avatar) avatar.textContent = String(client.name || 'K').trim().charAt(0).toUpperCase() || 'K';
   $('#cd-email').textContent = client.email || '-';
   $('#cd-phone').textContent = client.phone || '-';
   $('#cd-address').textContent = client.address || '-';
 
-  // ===== SUPABASE QUERIES =====
- // pobiera wszystkie zabiegi klienta; resztę filtrujemy lokalnie
-async function fetchClientBookings({ email, phone }) {
-  const e = normEmail(email);
-  const p = normPhone(phone);
+  await renderUpcoming();
+  showSection('cd-section-upcoming');
+  refreshCounts();
 
-  if (!e && !p) return { rows: [], reason: 'Brak e-maila/telefonu u klienta' };
-
-  let q = sb.from('bookings_view')
-    .select('*')                                // bierzemy wszystko, w tym 'notes'
-    .order('when', { ascending: true });
-
-  const parts = [];
-  if (e) parts.push(`client_email.ilike.${e}`);
-  if (p) parts.push(`phone.eq.${p}`);
-  q = q.or(parts.join(','));
-
-  const { data, error } = await q;
-  if (error) return { rows: [], reason: error.message };
-  return { rows: data || [], reason: null };
-}
-
-
-  // ===== RENDERERS =====
- function noteFor(r){
-  // na wszelki wypadek złap też inne możliwe nazwy
-  return r.notes ?? r.note ?? r.admin_notes ?? r.uwagi ?? r.comment ?? r.comments ?? r.remark ?? r.remarks ?? '';
-}
-
-async function renderUpcoming(){
-  const out = await fetchClientBookings({ email: client.email, phone: client.phone });
-  const tbody = document.getElementById('cd-upcoming-rows'); if (!tbody) return;
-
-  if (out.reason && !out.rows.length) {
-    tbody.innerHTML = `<tr><td colspan="4">${escapeHtml(out.reason)}</td></tr>`;
-    return;
-  }
-
-  const now = new Date();
-  const rows = out.rows.filter(r => new Date(r.when) >= now && r.status !== 'Anulowana');
-
-  if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="4">Brak nadchodzących</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = rows.map(it => `
-    <tr>
-      <td>${fmtDatePL(it.when)}</td>
-      <td>${escapeHtml(it.service_name || '-')}</td>
-      <td>${escapeHtml(it.status || '-')}</td>
-      <td>${escapeHtml(noteFor(it) || '-')}</td>
-    </tr>
-  `).join('');
-  // zapamiętaj najbliższy zabieg do promptu
-window.__cd_upcoming = out?.rows?.[0] || null;
-
-}
-
-async function renderHistory(){
-  const out = await fetchClientBookings({ email: client.email, phone: client.phone });
-  const tbody = document.getElementById('cd-history-rows'); if (!tbody) return;
-
-  if (out.reason && !out.rows.length) {
-    tbody.innerHTML = `<tr><td colspan="4">${escapeHtml(out.reason)}</td></tr>`;
-    return;
-  }
-
-  const now = new Date();
-  const rows = out.rows
-    .filter(r => new Date(r.when) < now && r.status !== 'Anulowana')
-    .sort((a,b) => new Date(b.when) - new Date(a.when));
-
-  if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="4">Brak historii</td></tr>`;
-    return;
-	// zapamiętaj historię do promptu
-window.__cd_history = out || { rows: [] };
-
-  }
-
-  // klucz notatki: preferuj booking_no; fallback: when|service
-  const localNotes = (client.treatmentNotes || {});
-  tbody.innerHTML = rows.map(it => {
-    const key = it.booking_no || `${it.when}|${it.service_name||''}`;
-    const curr = localNotes[key] || '';
-    return `
-      <tr data-key="${encodeURIComponent(key)}">
-        <td>${fmtDatePL(it.when)}</td>
-        <td>${escapeHtml(it.service_name || '-')}</td>
-        <td>${escapeHtml(it.status || '-')}</td>
-        <td>
-          <div style="display:flex; gap:6px; align-items:flex-start">
-            <textarea class="hist-note" rows="2" style="min-width:260px">${escapeHtml(curr)}</textarea>
-            <button class="btn" data-save-hist="${encodeURIComponent(key)}">Zapisz</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join('');
-}
-
-function setBtnCount(id, baseLabel, n){
-  const el = document.getElementById(id);
-  if (el) el.textContent = `${baseLabel} (${n})`;
-}
-
-async function refreshCounts(){
-  const out = await fetchClientBookings({ email: client.email, phone: client.phone });
-  const now = new Date();
-  const upcoming = out.rows.filter(r => new Date(r.when) >= now && r.status !== 'Anulowana').length;
-  const history  = out.rows.filter(r => new Date(r.when) <  now && r.status !== 'Anulowana').length;
-  setBtnCount('cd-btn-upcoming', 'Nadchodzące zabiegi', upcoming);
-  setBtnCount('cd-btn-history',  'Historia zabiegów',   history);
-}
-
-
-  // ===== NOTES (lokalne) =====
-  function loadNotesToForm(){
-    $('#cd-prefs').value      = client.prefs || '';
-    $('#cd-allergies').value  = client.allergies || '';
-    $('#cd-contras').value    = client.contras || '';
-    $('#cd-notes').value      = client.notes || '';
-  }
-  async function saveNotesFromForm(){
-    const list = clientsLoad();
-    const idx = list.findIndex(x => x.id === id);
-    if (idx < 0) return;
-    list[idx].prefs     = $('#cd-prefs')?.value || '';
-    list[idx].allergies = $('#cd-allergies')?.value || '';
-    list[idx].contras   = $('#cd-contras')?.value || '';
-    list[idx].notes     = $('#cd-notes')?.value || '';
-    const {error}=await sb.from('clients').update({prefs:list[idx].prefs,allergies:list[idx].allergies,contras:list[idx].contras,notes:list[idx].notes}).eq('id',id);
-    if(error){alert(`Nie zapisano: ${error.message}`);return}
-    clientsSave(list);
-    client = list[idx]; // odśwież referencję
-    alert('Zapisano.');
-  }
-
-  // ===== BUTTONS =====
-renderUpcoming().then(() => showSection('cd-section-upcoming'));
-refreshCounts(); // ← doda liczby do przycisków
-
-
-
-  $('#cd-btn-upcoming')?.addEventListener('click', async () => {
-    await renderUpcoming();
-    showSection('cd-section-upcoming');
-  });
-
-  $('#cd-btn-history')?.addEventListener('click', async () => {
-    await renderHistory();
-    showSection('cd-section-history');
-  });
-// zapis uwag terapeutki w Historii do Supabase
-document.getElementById('cd-history-rows')?.addEventListener('click', async (e) => {
-  const btn = e.target.closest('[data-save-hist]');
-  if (!btn) return;
-  const key = decodeURIComponent(btn.getAttribute('data-save-hist') || '');
-  const tr = btn.closest('tr');
-  const val = tr?.querySelector('.hist-note')?.value || '';
-
-  const list = clientsLoad();
-  const idx = list.findIndex(x => x.id === id);
-  if (idx < 0) return;
-  list[idx].treatmentNotes = list[idx].treatmentNotes || {};
-  list[idx].treatmentNotes[key] = val;
-  const {error}=await sb.from('clients').update({treatment_notes:list[idx].treatmentNotes}).eq('id',id);
-  if(error){alert(`Nie zapisano: ${error.message}`);return}
-  clientsSave(list);
-  client = list[idx]; // odśwież referencję
-
-  btn.textContent = 'Zapisano';
-  setTimeout(() => { btn.textContent = 'Zapisz'; }, 1000);
-});
-
-  $('#cd-btn-contact')?.addEventListener('click', () => {
-    showSection('cd-section-contact');
-  });
-
-  $('#cd-btn-notes')?.addEventListener('click', () => {
-    loadNotesToForm();
-    showSection('cd-section-notes');
-  });
-
+  $('#cd-btn-upcoming')?.addEventListener('click', async () => { await renderUpcoming(); showSection('cd-section-upcoming'); });
+  $('#cd-btn-suggestions')?.addEventListener('click', async () => { await renderSuggestions(); showSection('cd-section-suggestions'); });
+  $('#cd-btn-history')?.addEventListener('click', async () => { await renderHistory(); showSection('cd-section-history'); });
+  $('#cd-btn-contact')?.addEventListener('click', () => showSection('cd-section-contact'));
+  $('#cd-btn-notes')?.addEventListener('click', () => { loadNotesToForm(); showSection('cd-section-notes'); });
   $('#cd-save')?.addEventListener('click', saveNotesFromForm);
-
   $('#cd-btn-back')?.addEventListener('click', () => {
-    if (history.length > 1) history.back();
+    if (window.history.length > 1) window.history.back();
     else location.replace('index.html#clients');
   });
-  document.getElementById('cd-btn-suggestions')?.addEventListener('click', async () => {
-  await renderSuggestions();
-  showSection('cd-section-suggestions');
-});
-// === AI PROMPT: konfiguracja listy usług (do rekomendacji) ===
-const AI_SERVICES = [
-  'Masaż bambusami — 200.00 zł',
-  'Masaż ciepłą czekoladą — 200.00 zł',
-  'Masaż królewski Lomi Lomi — 250.00 zł',
-  'Masaż relaksacyjny ciała — 150.00 zł',
-  'Masaż rosyjski miodem — 150.00 zł',
-  'Terapia SPA — 250.00 zł',
-];
 
-// Skrót notatek relacyjnych (delikatne 0–2 wtrącenia)
-function buildLifeNotesShort(c) {
-  const s = (c?.notes || '').replace(/\s+/g, ' ').trim();
-  if (!s) return '';
-  return s.length > 140 ? s.slice(0, 140) + '…' : s;
-}
-
-// Podsumowanie historii (liczba wizyt, top usługa, ostatnia wizyta, średni odstęp)
-function summarizeHistory(hist) {
-  const rows = hist?.rows || [];
-  const visits_count = rows.length;
-  let last_visit = null, top_service = null, avg_interval = null;
-
-  if (rows.length) {
-    const sorted = [...rows].sort((a, b) => new Date(a.when) - new Date(b.when));
-    last_visit = sorted[sorted.length - 1].when;
-
-    const counts = {};
-    for (const r of rows) if (r.service_name) counts[r.service_name] = (counts[r.service_name] || 0) + 1;
-    top_service = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
-
-    const gaps = [];
-    for (let i = 1; i < sorted.length; i++) {
-      const d = (new Date(sorted[i].when) - new Date(sorted[i - 1].when)) / 86400000;
-      if (isFinite(d)) gaps.push(Math.round(d));
+  document.getElementById('cd-history-rows')?.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-save-hist]');
+    if (!button) return;
+    const key = decodeURIComponent(button.getAttribute('data-save-hist') || '');
+    const note = button.closest('tr')?.querySelector('.hist-note')?.value || '';
+    const list = clientsLoad();
+    const index = list.findIndex((item) => item.id === id);
+    if (index < 0) return;
+    list[index].treatmentNotes = list[index].treatmentNotes || {};
+    list[index].treatmentNotes[key] = note;
+    const { error } = await sb.from('clients').update({ treatment_notes: list[index].treatmentNotes }).eq('id', id);
+    if (error) {
+      alert(`Nie zapisano: ${error.message}`);
+      return;
     }
-    if (gaps.length) avg_interval = Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length);
-  }
-  return { visits_count, last_visit, top_service, avg_interval };
-}
-
-// Złożenie promptu do ChatGPT (jeden akapit, porada dla masażystki)
-function buildAIPromptForClient({ client, upcoming, history }) {
-  const { visits_count, last_visit, top_service, avg_interval } = summarizeHistory(history);
-  const whenTxt = upcoming?.when ? fmtDatePL(upcoming.when) : 'brak daty';
-  const current_service = upcoming?.service_name || 'brak zaplanowanego zabiegu';
-  const client_note = (upcoming?.notes ||
-    (history?.rows || []).slice().reverse().find(r => r.notes)?.notes || '') || '';
-  const therapist_note = ''; // tu możesz podstawić lokalne notatki p. zabiegowe, jeśli trzymasz
-  const prefs = client?.prefs || '';
-  const allergies = client?.allergies || '';
-  const cautions = client?.contras || '';
-  const context = client?.context || ''; // jeśli nie masz pola „context”, zostaw puste — nie szkodzi
-  const life_notes_short = buildLifeNotesShort(client);
-  const servicesLine = AI_SERVICES.join(' • ');
-
-  return [
-    'Piszesz do masażystki wykonującej zabieg na kliencie (nie do klienta). Udziel jednego, płynnego akapitu (180–220 słów) z poradą: na czym się skupić, jaką przyjąć intensywność (zakres odczuć bólu), czego nie robić/nie stosować oraz krótką auto-opiekę po. Bez list i nagłówków, lekko technicznie, bez diagnoz. Jeśli pojawi się ostry/promieniujący ból, drętwienie lub zawroty — napisz, by zmniejszyć intensywność lub przerwać. Na końcu zarekomenduj 1 najlepszy masaż na kolejną wizytę wyłącznie z poniższej listy, z krótkim powodem, sugerowanym czasem i intensywnością.',
-    `Dostępne zabiegi (wybierz dokładnie jeden, użyj nazwy jak poniżej): ${servicesLine}.`,
-    `Dzisiejszy zabieg: ${current_service} • ${whenTxt}.`,
-    `Preferencje: ${prefs || '—'}. Alergie/ostrożności: ${allergies || '—'}${cautions ? ' / ' + cautions : ''}.`,
-    `Kontekst życia/pracy: ${context || '—'}.`,
-    `Główne dolegliwości: ${client?.signals || '—'}.`,
-    `Uwagi klienta: "${client_note || '—'}". Notatka terapeutki: "${therapist_note || '—'}".`,
-    `Historia: wizyt ${visits_count || 0}, zwykle ${top_service || '—'}, ostatnio ${last_visit ? fmtDatePL(last_visit) : '—'}, odstęp ~${avg_interval || '—'} dni.`,
-    life_notes_short ? `Notatki relacyjne (do taktownych aluzji, max 1–2): ${life_notes_short}.` : ''
-  ].filter(Boolean).join('\n');
-}
-
-// Podpięcie przycisku: kopiuj prompt + otwórz ChatGPT
-function wirePromptButton() {
-  const btn = document.getElementById('cd-prompt-btn');
-  if (!btn) return;
-  btn.addEventListener('click', async () => {
-    try {
-      // UWAGA: zakładamy, że masz dostęp do obiektów 'client'
-      // oraz że w renderach zapiszesz najnowsze wyniki do window.__cd_upcoming / window.__cd_history (krok 3).
-      const prompt = buildAIPromptForClient({
-        client,
-        upcoming: window.__cd_upcoming || null,
-        history: window.__cd_history || { rows: [] }
-      });
-      await navigator.clipboard.writeText(prompt);
-      alert('✅ Skopiowano prompt. Otwieram ChatGPT — wklej i wyślij.');
-      window.open('https://chat.openai.com/', '_blank');
-    } catch (err) {
-      console.error('prompt copy error', err);
-      alert('Nie udało się skopiować promptu. Sprawdź uprawnienia do schowka.');
-    }
+    clientsSave(list);
+    client = list[index];
+    button.textContent = 'Zapisano';
+    setTimeout(() => { button.textContent = 'Zapisz'; }, 1000);
   });
-}
-
 })();
