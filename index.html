@@ -39,6 +39,7 @@
         <button data-tab="finance"><i data-icon="wallet"></i><span>Finanse</span></button>
         <button data-tab="cosmetics"><svg class="nav-svg cosmetics-nav-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M8 2.5h4v3H8zM7 5.5h6l2 3V17H5V8.5z"></path><path d="M7.5 11c1.6-1.2 3.4-1.2 5 0"></path></svg><span>Kosmetyki</span></button>
         <button data-tab="ideas"><svg class="nav-svg" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 14h6m-5 3h4"></path><path d="M6.5 11.5C5.6 10.7 5 9.5 5 8a5 5 0 0 1 10 0c0 1.5-.6 2.7-1.5 3.5-.7.7-1 1.2-1 2h-5c0-.8-.3-1.3-1-2z"></path></svg><span>Pomysły</span></button>
+        <button data-tab="advisor"><svg class="nav-svg" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4.5h12v9H9l-3.5 3v-3H4z"></path><path d="M7 8h6M7 10.5h4"></path></svg><span>Doradca AI</span></button>
         <button data-tab="settings"><i data-icon="settings"></i><span>Ustawienia</span></button>
       </nav>
       <div class="sidebar-user"><span class="avatar">M</span><div><strong>Marzena</strong><small>Administrator</small></div><button id="logout-btn" class="text-btn" type="button">Wyloguj</button></div>
@@ -143,6 +144,19 @@
         </form>
         <div id="ideas-list" class="ideas-list"><div class="paper-panel empty-state">Ładowanie pomysłów…</div></div>
       </section>
+      <section id="advisor-screen" class="screen hidden">
+        <div class="advisor-main-head"><div><p class="eyebrow">Pisemne wsparcie</p><h2>Doradca AI</h2><p class="muted">Doradca klienta albo ogólne inspiracje SPA — bez ukrywania funkcji w karcie klienta.</p></div></div>
+        <section class="paper-panel global-advisor-panel">
+          <div class="advisor-scope-switch"><button class="btn primary" type="button" data-global-advisor-scope="client">Klient</button><button class="btn ghost" type="button" data-global-advisor-scope="general">Pomysły SPA</button></div>
+          <div id="global-advisor-client-wrap" class="global-advisor-client"><label for="global-advisor-client">Wybierz klienta<select id="global-advisor-client"><option value="">Wybierz klienta…</option></select></label><p>Imię i nazwisko służy tylko do wybrania lokalnej karty. Nie jest przekazywane do modelu ani powtarzane w odpowiedzi.</p></div>
+          <div class="advisor-chat-head"><div><h3>Zapytaj doradcę</h3><p>Rozmowa jest tymczasowa i znika po odświeżeniu strony.</p></div><button id="global-advisor-clear" class="text-btn" type="button">Wyczyść rozmowę</button></div>
+          <div id="global-advisor-quick" class="advisor-quick"></div>
+          <div id="global-advisor-messages" class="advisor-messages" aria-live="polite"></div>
+          <div class="advisor-composer"><textarea id="global-advisor-question" rows="3" maxlength="2000" placeholder="Np. co najważniejszego pamiętać przed kolejną wizytą?"></textarea><button id="global-advisor-send" class="btn primary" type="button">Wyślij</button></div>
+          <p id="global-advisor-status" class="advisor-status"></p>
+        </section>
+        <p class="advisor-disclaimer">Doradca nie stawia diagnoz i nie zapisuje danych klienta. Jedyny zapis z rozmowy to ostatni przepis po osobnym poleceniu „zapisz” lub „zapisz przepis”.</p>
+      </section>
       <section id="settings-screen" class="screen hidden">
         <div class="settings-layout">
           <section class="paper-panel settings-card settings-message-card">
@@ -165,7 +179,7 @@
       </section>
     </main>
 
-    <nav class="mobile-nav" aria-label="Nawigacja mobilna"><button data-tab-target="dashboard" class="active"><i data-icon="home"></i><span>Pulpit</span></button><button data-tab-target="finance"><i data-icon="wallet"></i><span>Finanse</span></button><button class="mobile-add" data-tab-target="slots" data-focus-availability="true" aria-label="Dodaj termin">＋</button><button data-tab-target="clients"><i data-icon="users"></i><span>Klienci</span></button><button data-tab-target="cosmetics"><svg class="nav-svg cosmetics-nav-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M8 2.5h4v3H8zM7 5.5h6l2 3V17H5V8.5z"></path><path d="M7.5 11c1.6-1.2 3.4-1.2 5 0"></path></svg><span>Kosmetyki</span></button><button data-tab-target="ideas"><svg class="nav-svg" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 14h6m-5 3h4"></path><path d="M6.5 11.5C5.6 10.7 5 9.5 5 8a5 5 0 0 1 10 0c0 1.5-.6 2.7-1.5 3.5-.7.7-1 1.2-1 2h-5c0-.8-.3-1.3-1-2z"></path></svg><span>Pomysły</span></button><button data-tab-target="settings"><i data-icon="more"></i><span>Więcej</span></button></nav>
+    <nav class="mobile-nav" aria-label="Nawigacja mobilna"><button data-tab-target="dashboard" class="active"><i data-icon="home"></i><span>Pulpit</span></button><button data-tab-target="finance"><i data-icon="wallet"></i><span>Finanse</span></button><button class="mobile-add" data-tab-target="slots" data-focus-availability="true" aria-label="Dodaj termin">＋</button><button data-tab-target="clients"><i data-icon="users"></i><span>Klienci</span></button><button data-tab-target="cosmetics"><svg class="nav-svg cosmetics-nav-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M8 2.5h4v3H8zM7 5.5h6l2 3V17H5V8.5z"></path><path d="M7.5 11c1.6-1.2 3.4-1.2 5 0"></path></svg><span>Kosmetyki</span></button><button data-tab-target="ideas"><svg class="nav-svg" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 14h6m-5 3h4"></path><path d="M6.5 11.5C5.6 10.7 5 9.5 5 8a5 5 0 0 1 10 0c0 1.5-.6 2.7-1.5 3.5-.7.7-1 1.2-1 2h-5c0-.8-.3-1.3-1-2z"></path></svg><span>Pomysły</span></button><button data-tab-target="advisor"><svg class="nav-svg" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4.5h12v9H9l-3.5 3v-3H4z"></path><path d="M7 8h6M7 10.5h4"></path></svg><span>Doradca</span></button><button data-tab-target="settings"><i data-icon="more"></i><span>Więcej</span></button></nav>
   </div>
 
   <div id="details-modal" class="modal hidden" role="dialog" aria-modal="true"><div class="modal-content"><button id="close-details" class="modal-close" aria-label="Zamknij">×</button><p class="eyebrow">Rezerwacja</p><h2>Szczegóły wizyty</h2><div id="details-body"></div><div id="details-actions" class="modal-actions"></div></div></div>
@@ -177,5 +191,6 @@
   <script src="assets/finance.js"></script>
   <script src="assets/cosmetics.js"></script>
   <script src="assets/ideas.js"></script>
+  <script src="assets/advisor.js"></script>
 </body>
 </html>
